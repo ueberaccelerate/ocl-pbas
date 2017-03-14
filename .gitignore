@@ -1,0 +1,13 @@
+*.vs
+*.svn
+*.opendb
+*.suo
+*.sdf
+Debug
+Release
+pbas_impl/Debug
+pbas_impl/Release
+*.vcxproj
+*.filters
+*.user
+*.db
