@@ -52,13 +52,13 @@ MPBAS::PBASImpl::~PBASImpl() {
   clReleaseMemObject(m_cl_mem_avrg_Im);
   clReleaseMemObject(m_cl_mem_index_r);
 
-  std::for_each(m_cl_mem_D, m_cl_mem_D + N,
-                [](const auto mem) { clReleaseMemObject(mem); });
-  std::for_each(m_cl_mem_M, m_cl_mem_M + N,
-                [](const auto mem) { clReleaseMemObject(mem); });
+  for (auto obj : m_cl_mem_D) {
+    clReleaseMemObject(obj);
+  }
+  for (auto obj : m_cl_mem_M) {
+    clReleaseMemObject(obj);
+  }
 
-  //     clReleaseMemObject(m_cl_mem_D[N];
-  //     clReleaseMemObject(m_cl_mem_M[N];
   clReleaseMemObject(m_cl_mem_mask);
   clReleaseMemObject(m_cl_mem_avrg_d);
   clReleaseMemObject(m_cl_mem_R);
@@ -76,28 +76,6 @@ void MPBAS::PBASImpl::init_model(const cv::Mat I) {
     _D.push_back(l_R);
     calculate_I_and_M(I, _model);
     _index++;
-
-#if DEBUG_MODE
-    if (I.channels() == 3) {
-      for (size_t i = 0; i < _index; i++) {
-        for (size_t j = 0; j < 6; j++) {
-          cv::imshow("test split color (" + std::to_string(j) + ")",
-                     _model[i * 6 + j]);
-        }
-        cv::waitKey(30);
-      }
-
-    } else {
-      for (size_t i = 0; i < _index; i++) {
-        for (size_t j = 0; j < 2; j++) {
-          cv::imshow("test split color (" + std::to_string(j) + ")",
-                     _model[i * 2 + j]);
-        }
-        cv::waitKey(30);
-      }
-    }
-
-#endif
   }
 }
 
@@ -225,33 +203,6 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask, bool is_cpu) {
         update_T(x, y, mask.at<uchar>(y, x), min_d);
       }
     }
-
-#if DEBUG_MODE
-    cv::Mat R = _R;
-    cv::Mat T = _T;
-    R.convertTo(R, CV_32FC1, 1.f / 255.f);
-    T.convertTo(T, CV_32FC1, 1.f / 255.f);
-    cv::imshow("R", R);
-    cv::imshow("T", T);
-// cv::waitKey(20);
-
-#else
-// cv::Mat R = _R.clone();
-// cv::Mat T = _T.clone();
-// R.convertTo(R, CV_32FC1, 1.f / 255.f);
-// T.convertTo(T, CV_32FC1, 1.f / 255.f);
-// cv::imshow("R", R);
-// cv::imshow("T", T);
-// if (_index >= 5)
-// for (size_t i = 0; i < 5; i++)
-//{
-
-//    cv::imshow("test split color (" + std::to_string(i) + ")", _model[i * 2
-//    ]);
-
-//    cv::waitKey(30);
-//}
-#endif
   } else {
     // NOTE: OpenCL work position
     assert(src.type() == CV_8UC1);
@@ -291,29 +242,6 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask, bool is_cpu) {
 
       m_cl_index++;
     }
-#if DEBUG_MEM_CL
-    cv::Mat mat_M = cv::Mat(HEIGHT, WIDTH, CV_32FC2);
-    // cv::Mat D = cv::Mat(HEIGHT, WIDTH, CV_32FC1);
-
-    m_work.enqueue_buffer_read(
-        m_cl_mem_feature, sizeof(cl_float2) * WIDTH * HEIGHT, mat_M.data, e);
-    // m_work.enqueue_buffer_read(m_cl_mem_D[m_cl_index-1],
-    // sizeof(cl_float)*WIDTH*HEIGHT, D.data, e);
-
-    std::vector<cv::Mat> spt;
-
-    cv::split(mat_M, spt);
-    spt[1].convertTo(spt[0], CV_32FC1, 1.f / 255.f);
-    // D.convertTo(D, CV_32FC1, 1.f / 255.f);
-
-    // cv::imshow("m_cl_mem_M[0]" + std::to_string(m_cl_index-1), spt[0]);
-    cv::imshow("m_cl_mem_M[1]", spt[1]);
-// cv::imshow("D", D);
-
-//
-
-// cv::waitKey(0);
-#endif
 
     cl_float min_R = 200;
     cl_float average_mag = 0;
@@ -378,10 +306,6 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask, bool is_cpu) {
 
     cv::imshow("mask_test", mask_test);
     cv::waitKey(1);
-
-// m_work.enqueue_buffer_read(m_cl_mem_avrg_Im, sizeof(cl_float), &m_cl_avrg_Im,
-// e);  m_cl_avrg_Im /= WIDTH*HEIGHT;  printf("\tavrg: %f\r", m_cl_avrg_Im);
-
 #endif
   }
 }
@@ -398,16 +322,9 @@ void MPBAS::PBASImpl::run(cv::Mat src) {
   t.start();
   process(src, mask_gpu, false);
   printf("Process(3) time: %d ms\n", t.get());
-
-  cv::medianBlur(mask_cpu, mask_cpu, 3);
   cv::medianBlur(mask_gpu, mask_gpu, 3);
 
-  //    cv::imshow("pbasImplCpu", mask);
-  //      cv::imwrite(std::string(PATH_TO_SOURCE) + "src.png", src);
-  //      cv::imwrite(std::string(PATH_TO_SOURCE) + "mask_cpu.png", mask_cpu);
-  //      cv::imwrite(std::string(PATH_TO_SOURCE) + "mask_gpu.png", mask_gpu);
   cv::imshow("pbasImplGpu", mask_gpu);
-  //     cv::waitKey(0);
 }
 
 void MPBAS::PBASImpl::update_R(int x, int y, float mr) {
@@ -493,26 +410,20 @@ void MPBAS::PBASImpl::create_buffers() {
   for (size_t i = 0; i < N; i++) {
     m_work.create_buffer(m_cl_mem_M[i], CL_MEM_READ_WRITE,
                          sizeof(cl_float2) * WIDTH * HEIGHT, nullptr);
+  }
+  for (size_t i = 0; i < N; i++) {
     m_work.create_buffer(m_cl_mem_D[i], CL_MEM_READ_WRITE,
                          sizeof(cl_float) * WIDTH * HEIGHT, nullptr);
   }
-
   cl_event e{};
-  const auto WaitAndRelease = [](auto &eventObject) {
-    return;
-    clWaitForEvents(1, &eventObject);
-    clReleaseEvent(eventObject);
-  };
   cl_uint index_r = 0;
 
   m_work.enqueue_buffer_fill(m_cl_mem_index_r, WIDTH * HEIGHT, &index_r,
                              sizeof(cl_uint), e);
-  WaitAndRelease(e);
   cl_float average_d = 0.f;
   m_work.enqueue_buffer_fill(m_cl_mem_index_r,
                              sizeof(cl_float) * WIDTH * HEIGHT, &average_d,
                              sizeof(cl_uint), e);
-  WaitAndRelease(e);
   std::vector<cl_uint> r_numbers;
 
   std::generate_n(std::back_insert_iterator<std::vector<cl_uint>>(r_numbers),
@@ -521,7 +432,6 @@ void MPBAS::PBASImpl::create_buffers() {
   m_work.enqueue_buffer_write(m_cl_mem_random_numbers,
                               sizeof(cl_uint) * WIDTH * HEIGHT,
                               r_numbers.data(), e);
-  WaitAndRelease(e);
 }
 
 void MPBAS::PBASImpl::init_cl_model() {}

@@ -79,8 +79,8 @@ OCLWork::OCLWork() {
 
 OCLWork::~OCLWork() {
   clReleaseProgram(_program);
-  clReleaseContext(_context);
   clReleaseCommandQueue(_command_queue);
+  clReleaseContext(_context);
 }
 
 bool OCLWork::create_kernel(cl_kernel &l_kernel,
@@ -178,7 +178,7 @@ void OCLWork::enqueue_buffer_copy(cl_mem &mem_src, cl_mem &mem_dest,
                                   cl_uint size, cl_event &event) {
   cl_int err;
   err = clEnqueueCopyBuffer(_command_queue, mem_src, mem_dest, 0, 0, size, 0,
-                            NULL, &event);
+                            NULL, NULL);
   MCLASSERT(err);
 }
 
