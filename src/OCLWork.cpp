@@ -94,16 +94,10 @@ OCLWork::OCLWork()
 
 }
 
-
-OCLWork::~OCLWork()
-{
-    if (_program)
-        clReleaseProgram(_program);
-    if (_context)
-        clReleaseContext(_context);
-    if (_command_queue)
-        clReleaseCommandQueue(_command_queue);
-
+OCLWork::~OCLWork() {
+  clReleaseProgram(_program);
+  clReleaseContext(_context);
+  clReleaseCommandQueue(_command_queue);
 }
 
 bool OCLWork::create_kernel(cl_kernel &l_kernel, const std::string &kernel_name)
@@ -182,14 +176,16 @@ void OCLWork::enqueue_image_write(cl_mem &mem, cl_uint width, cl_uint height, vo
 void OCLWork::enqueue_buffer_read(cl_mem &mem, cl_uint size, void *data, cl_event &event)
 {
     cl_int err;
-    err = clEnqueueReadBuffer(_command_queue, mem, CL_TRUE, 0, size, data, 0, NULL, &event);
+    err = clEnqueueReadBuffer(_command_queue, mem, CL_TRUE, 0, size, data, 0, NULL, NULL);
+    clFinish(_command_queue);
     MCLASSERT(err);
 }
 
 void OCLWork::enqueue_buffer_write(cl_mem &mem, cl_uint size, void *data, cl_event &event)
 {
     cl_int err;
-    err = clEnqueueWriteBuffer(_command_queue, mem, CL_TRUE, 0, size, data, 0, NULL, &event);
+    err = clEnqueueWriteBuffer(_command_queue, mem, CL_TRUE, 0, size, data, 0, NULL, NULL);
+    clFinish(_command_queue);
     MCLASSERT(err);
 }
 
@@ -204,7 +200,8 @@ void OCLWork::enqueue_buffer_fill(cl_mem &mem_buf, cl_uint size_buf, void *fill_
 {
     cl_int err;
 
-    err = clEnqueueFillBuffer(_command_queue, mem_buf, fill_val, size_fill, 0, size_buf, 0, NULL, &event);
+    err = clEnqueueFillBuffer(_command_queue, mem_buf, fill_val, size_fill, 0, size_buf, 0, NULL, NULL);
+    clFinish(_command_queue);
     MCLASSERT(err);
 }
 
@@ -280,7 +277,7 @@ void OCLWork::run_cl_kernel(cl_kernel &l_kernel, const cv::Vec2i &globalNDSize, 
     cl_int err;
     err = clEnqueueNDRangeKernel(_command_queue, l_kernel, 2, NULL,
         globalWorkSize, localWorkSize,
-        0, NULL, &e);
-    clWaitForEvents(1, &e);
+        0, NULL, NULL);
+    clFinish(_command_queue);
     MCLASSERT(err);
 }

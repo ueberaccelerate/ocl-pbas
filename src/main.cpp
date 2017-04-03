@@ -31,12 +31,12 @@ int main()
 //         Timer t;
 //         t.start();
 //         pbas.process(&input, &out);
-//             
-//         printf("Process(1) time: %d ms\n", t.get());
+// //             
+//          printf("Process(1) time: %d ms\n", t.get());
 
 //         cv::medianBlur(out, out, 3);
 // 
-         pbas_m.run(input);
+        pbas_m.run(input);
 // 
 // 
 //         cv::imshow("input src", input);
