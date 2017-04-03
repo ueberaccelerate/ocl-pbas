@@ -1,12 +1,6 @@
-
-// TODO: Add OpenCL kernel code here.
-
 #define IS_BOUNDS(val, bound) ((val) >= (0) && (val) < (bound))
 
 #define SK_SIZE 3
-
-const sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE |
-                          CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
 
 constant float min_R = 200.f;
 constant int min_index = 2;
@@ -54,35 +48,9 @@ kernel void magnitude(global uchar *src, const uint width, const uint height,
   int jj = get_global_id(1); // == get_global_id(1);
   int2 coords = (int2)(ii, jj);
 
-  // Reads pixels
-
   float gx_val = 0.f;
   float gy_val = 0.f;
-#if WORK_WITH_LOCAL
-  __local float P[32 + SK_SIZE][32 + SK_SIZE];
-  P[idX][idY] = read_imagef(I, sampler, coords).x;
-  barrier(CLK_LOCAL_MEM_FENCE);
-  if (idX < SK_SIZE)
-    P[idX + 32][idY] = read_imagef(I, sampler, (int2)(ii + 32, jj)).x;
-  if (idY < SK_SIZE)
-    P[idX][idY + 32] = read_imagef(I, sampler, (int2)(ii, jj + 32)).x;
-  if (idX < SK_SIZE && idY < SK_SIZE)
-    P[idX + 32][idY + 32] = read_imagef(I, sampler, (int2)(ii + 32, jj + 32)).x;
-  barrier(CLK_LOCAL_MEM_FENCE);
-  for (int fi = 0; fi < SK_SIZE; fi++) {
-    for (int fj = 0; fj < SK_SIZE; fj++) {
-      gx_val += P[(idX + fj)][idY + fi] * Gx[fi * SK_SIZE + fj];
-      gy_val += P[(idX + fj)][idY + fi] * Gy[fi * SK_SIZE + fj];
-    }
-  }
-  if (coords.x + SK_SIZE / 2 < get_image_width(Ix) &&
-      coords.y + SK_SIZE / 2 < get_image_height(Ix)) {
-    write_imagef(Ix, (int2)(coords.x + SK_SIZE / 2, coords.y + SK_SIZE / 2),
-                 gx_val);
-    write_imagef(Iy, (int2)(coords.x + SK_SIZE / 2, coords.y + SK_SIZE / 2),
-                 gy_val);
-  }
-#else
+
   const int half_sk_size = SK_SIZE / 2;
   for (int fi = -half_sk_size; fi <= half_sk_size; fi++) {
 
@@ -107,7 +75,6 @@ kernel void magnitude(global uchar *src, const uint width, const uint height,
     des[jj * width + ii].x = i_val;
     des[jj * width + ii].y = mag;
   }
-#endif
 }
 
 inline float pbas_distance(float I_i, float I_m, float B_i, float B_m,
@@ -115,7 +82,6 @@ inline float pbas_distance(float I_i, float I_m, float B_i, float B_m,
   float Im_diff = abs_diff((int)(I_m), (int)(B_m));
   float Ii_diff = abs_diff((int)(I_i), (int)(B_i));
 
-  // NOTE: may optimization
   float res = (alpha / avarage_m) * Im_diff + Ii_diff;
   return res;
 }
