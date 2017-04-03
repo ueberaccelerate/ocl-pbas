@@ -33,7 +33,7 @@ OCLWork::OCLWork()
 // 
 //         }
 //     }
-    err = clGetDeviceIDs(_platform_ids[0], CL_DEVICE_TYPE_CPU, 1, &_device_ids, nullptr);
+    err = clGetDeviceIDs(_platform_ids[1], CL_DEVICE_TYPE_CPU, 1, &_device_ids, nullptr);
     cl_int uerr;
     _context = clCreateContext(NULL, 1, &_device_ids, NULL, NULL, &uerr);
     //_context = clCreateContextFromType(NULL, CL_DEVICE_TYPE_CPU, NULL, NULL, &uerr);
@@ -50,7 +50,7 @@ OCLWork::OCLWork()
     MCLASSERT(uerr);
 #endif
 
-    std::string source_program = Utiles::load_program_cl_from_file("opencl_kernels.cl");
+    std::string source_program = Utiles::load_program_cl_from_file("D:\\Projects\\Common\\TrashProjects\\diplom\\src\\opencl_kernels.cl");
     const char* source = source_program.c_str();
     const size_t size = source_program.size();
     _program = clCreateProgramWithSource(_context, 1, &source, &size, &uerr);

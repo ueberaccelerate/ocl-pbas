@@ -50,7 +50,7 @@ namespace MPBAS
         ~PBASImpl();
 
         void init_model(const cv::Mat I);
-        void calculate_I_and_M(const cv::Mat &I, std::vector<cv::Mat> &feature);
+        void calculate_I_and_M(const cv::Mat I, std::vector<cv::Mat> &feature);
 
         float distance(float &I_i, float &I_m, float &B_i, float &B_m, float alpha = 0, float avarage_m = 1);
 

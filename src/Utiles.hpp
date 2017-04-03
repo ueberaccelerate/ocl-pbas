@@ -6,17 +6,14 @@
 #include <fstream>
 #include <chrono>
 
-
-
-#define MCLASSERT(ERR)\
-	if(ERR != CL_SUCCESS)                                                   \
-                {                                                           \
-        printf(                                                             \
-            "OpenCL error %s happened in file %s at line %s.",              \
-            Utiles::LOG(ERR).data(), __FILE__,std::to_string(__LINE__).data());    \
-                                                             \
-            }
-
+#define MCLASSERT(ERR)                                                         \
+  if (ERR != CL_SUCCESS) {                                                     \
+    printf("OpenCL error %s happened in file %s at line %s.\n",                \
+           Utiles::LOG(ERR).data(), __FILE__,                                  \
+           std::to_string(__LINE__).data());                                   \
+    int ibreak;                                                                \
+    ibreak = 0;                                                                \
+  }
 
 #define MPASSERT(name,data) \
     if(!data)\

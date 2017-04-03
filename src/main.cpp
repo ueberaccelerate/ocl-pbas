@@ -6,7 +6,7 @@
 int main()
 {
     //cv::VideoCapture cap(0);
-    cv::VideoCapture cap("C:\\data\\sofa\\input\\in%06d.jpg");
+    cv::VideoCapture cap(0);
 
     int index = 0;
 
