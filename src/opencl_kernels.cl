@@ -95,11 +95,6 @@ kernel void magnitude(global uchar *src, const uint width, const uint height,
         gy_val +=
             src_val * Gy[(fi + half_sk_size) * SK_SIZE + fj + half_sk_size];
       }
-
-      //    gx_val += read_imagef(src, sampler, (int2)(ii + fi, jj + fj)).x *
-      //    Gx[(fi + SK_SIZE / 2)* SK_SIZE + fj + SK_SIZE / 2]; gy_val +=
-      //    read_imagef(src, sampler, (int2)(ii + fi, jj + fj)).x * Gy[(fi +
-      //    SK_SIZE / 2)* SK_SIZE + fj + SK_SIZE / 2];
     }
   }
 
@@ -285,17 +280,9 @@ kernel void pbas_part2(
     global float *D12, global float *D13, global float *D14, global float *D15,
     global float *D16, global float *D17, global float *D18,
     global float *D19) {
+
   int ii = get_global_id(0); // == get_global_id(0);
   int jj = get_global_id(1); // == get_global_id(1);
-
-  // if(ii==0&& jj==0)
-  //{
-
-  //    printf("rand: %d\n", lfsr113_Bits(&rand_n[jj * width + ii]) %
-  //    model_size);
-
-  //
-  //}
 
   int2 coords = (int2)(ii, jj);
 
@@ -382,9 +369,9 @@ kernel void update_T_R(global uchar *mask, const uint width, const uint height,
     R_val = (float)R_lower;
 
   if (color == 0) {
-    T_val -= (T_dec / avr);
+    T_val += (T_dec / avr);
   } else {
-    T_val += (T_inc / avr);
+    T_val -= (T_inc / avr);
   }
 
   if (T_val < T_lower)

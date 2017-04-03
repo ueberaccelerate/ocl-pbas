@@ -35,45 +35,42 @@ MPBAS::PBASImpl::PBASImpl() : _index(0), m_cl_index(0), m_cl_avrg_Im(0.f) {
   create_buffers();
 }
 
-MPBAS::PBASImpl::~PBASImpl() 
-{
-    clReleaseKernel(m_cl_fill_R_T_kernel);
-    clReleaseKernel(m_cl_magnitude_kernel);
-    clReleaseKernel(m_cl_average_Im_kernel);
-    clReleaseKernel(m_cl_pbas_part1_kernel);
-    clReleaseKernel(m_cl_pbas_part2_kernel);
-    clReleaseKernel(m_cl_update_T_R_kernel);
+MPBAS::PBASImpl::~PBASImpl() {
+  clReleaseKernel(m_cl_fill_R_T_kernel);
+  clReleaseKernel(m_cl_magnitude_kernel);
+  clReleaseKernel(m_cl_average_Im_kernel);
+  clReleaseKernel(m_cl_pbas_part1_kernel);
+  clReleaseKernel(m_cl_pbas_part2_kernel);
+  clReleaseKernel(m_cl_update_T_R_kernel);
 
-    // ==========================
-    // image
+  // ==========================
+  // image
 
+  // buffer
+  clReleaseMemObject(m_cl_mem_I);
+  clReleaseMemObject(m_cl_mem_feature);
+  clReleaseMemObject(m_cl_mem_avrg_Im);
+  clReleaseMemObject(m_cl_mem_index_r);
 
-    // buffer 
-    clReleaseMemObject(m_cl_mem_I);
-    clReleaseMemObject(m_cl_mem_feature);
-    clReleaseMemObject(m_cl_mem_avrg_Im);
-    clReleaseMemObject(m_cl_mem_index_r);
+  std::for_each(m_cl_mem_D, m_cl_mem_D + N,
+                [](const auto mem) { clReleaseMemObject(mem); });
+  std::for_each(m_cl_mem_M, m_cl_mem_M + N,
+                [](const auto mem) { clReleaseMemObject(mem); });
 
-    std::for_each(m_cl_mem_D, m_cl_mem_D + N, [](const auto mem) {
-        clReleaseMemObject(mem); });
-    std::for_each(m_cl_mem_M, m_cl_mem_M + N, [](const auto mem) {
-        clReleaseMemObject(mem); });
-
-//     clReleaseMemObject(m_cl_mem_D[N];
-//     clReleaseMemObject(m_cl_mem_M[N];
-    clReleaseMemObject(m_cl_mem_mask);
-    clReleaseMemObject(m_cl_mem_avrg_d);
-    clReleaseMemObject(m_cl_mem_R);
-    clReleaseMemObject(m_cl_mem_T);
-    clReleaseMemObject(m_cl_mem_random_numbers);
-
+  //     clReleaseMemObject(m_cl_mem_D[N];
+  //     clReleaseMemObject(m_cl_mem_M[N];
+  clReleaseMemObject(m_cl_mem_mask);
+  clReleaseMemObject(m_cl_mem_avrg_d);
+  clReleaseMemObject(m_cl_mem_R);
+  clReleaseMemObject(m_cl_mem_T);
+  clReleaseMemObject(m_cl_mem_random_numbers);
 }
 void MPBAS::PBASImpl::init_model(const cv::Mat I) {
   if (_index < N) {
 
     if (_index == 0) {
-      _T = cv::Mat::ones(I.size(), CV_32FC1)*T_lower;
-      _R = cv::Mat::ones(I.size(), CV_32FC1)*R_lower;
+      _T = cv::Mat::ones(I.size(), CV_32FC1) * T_lower;
+      _R = cv::Mat::ones(I.size(), CV_32FC1) * R_lower;
     }
     auto l_R = _R.clone();
     _D.push_back(l_R);
@@ -170,14 +167,6 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask, bool is_cpu) {
           float B_i = _model[index_l * 2 + 0].at<uchar>(y, x);
           float B_m = _model[index_l * 2 + 1].at<float>(y, x);
           diff = distance(I_i, I_m, B_i, B_m, _alpha, average_mag);
-          // if (y == 0 && x == 0)
-          //    printf("CPU: %f \n", diff);
-          // if (x == 0 && y == 0)
-          //{
-          //    printf("I_i: %f\nI_m: %f\nB_i: %f\nB_m: %f\n", I_i, I_m, B_i,
-          //    B_m); printf("%f < %f = %s ", diff, R, (diff < min_R) ? "true" :
-          //    "false");
-          //}
 
           if (diff < R) {
             if (diff < min_R) {
@@ -265,14 +254,12 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask, bool is_cpu) {
 #endif
   } else {
     // NOTE: OpenCL work position
-    cl_event e{};
-
     assert(src.type() == CV_8UC1);
-
-    src.convertTo(src, CV_8UC1);
-
+    cl_event e{};
     mask = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
+
     m_work.enqueue_buffer_write(m_cl_mem_I, WIDTH * HEIGHT, src.data, e);
+
     set_arg_magnitude_kernel(m_cl_magnitude_kernel, m_cl_mem_I, WIDTH, HEIGHT,
                              m_cl_mem_feature);
     m_work.run_cl_kernel(m_cl_magnitude_kernel, cv::Vec2i(WIDTH, HEIGHT),
@@ -404,9 +391,9 @@ void MPBAS::PBASImpl::run(cv::Mat src) {
   cv::Mat mask_cpu;
   cv::Mat mask_gpu;
 
-//   t.start();
-//   process(src, mask_cpu, true);
-//   printf("Process(2) time: %d ms\n", t.get());
+  //   t.start();
+  //   process(src, mask_cpu, true);
+  //   printf("Process(2) time: %d ms\n", t.get());
 
   t.start();
   process(src, mask_gpu, false);
@@ -512,7 +499,7 @@ void MPBAS::PBASImpl::create_buffers() {
 
   cl_event e{};
   const auto WaitAndRelease = [](auto &eventObject) {
-      return;
+    return;
     clWaitForEvents(1, &eventObject);
     clReleaseEvent(eventObject);
   };
@@ -526,12 +513,14 @@ void MPBAS::PBASImpl::create_buffers() {
                              sizeof(cl_float) * WIDTH * HEIGHT, &average_d,
                              sizeof(cl_uint), e);
   WaitAndRelease(e);
-  std::vector <cl_uint> r_numbers;
+  std::vector<cl_uint> r_numbers;
 
-  std::generate_n(std::back_insert_iterator<std::vector <cl_uint> >(r_numbers),(WIDTH * HEIGHT),std::rand);
+  std::generate_n(std::back_insert_iterator<std::vector<cl_uint>>(r_numbers),
+                  (WIDTH * HEIGHT), std::rand);
 
   m_work.enqueue_buffer_write(m_cl_mem_random_numbers,
-                              sizeof(cl_uint) * WIDTH * HEIGHT, r_numbers.data(), e);
+                              sizeof(cl_uint) * WIDTH * HEIGHT,
+                              r_numbers.data(), e);
   WaitAndRelease(e);
 }
 
