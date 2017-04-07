@@ -1,5 +1,5 @@
 #pragma once
-#include <cl/cl.h>
+#include <CL/cl.h>
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <iostream>

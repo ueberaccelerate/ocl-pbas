@@ -62,6 +62,7 @@ private:
 
 	cl_command_queue _command_queue;
 	cl_program _program;
+
 };
 
 
