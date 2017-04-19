@@ -447,13 +447,13 @@ void MPBAS::PBASImpl::set_arg_fill_R_T_kernel(
   err |= clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_mem),
                         (void *)&mem_R);
   index++;
-  err = clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_uint),
                        (void *)&width);
   index++;
-  err = clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_uint),
                        (void *)&height);
   index++;
-  err = clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_int), (void *)&T);
+  err |= clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_int), (void *)&T);
   index++;
   err |=
       clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_int), (void *)&R);
@@ -469,10 +469,10 @@ void MPBAS::PBASImpl::set_arg_magnitude_kernel(cl_kernel &m_cl_magnitude_kernel,
   err = clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_mem),
                        (void *)&src);
   index++;
-  err = clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_uint),
                        (void *)&width);
   index++;
-  err = clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_uint),
                        (void *)&height);
   index++;
   err |= clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_mem),
@@ -488,10 +488,10 @@ void MPBAS::PBASImpl::set_arg_average_Im(cl_mem &mem_Im, cl_uint width,
   err = clSetKernelArg(m_cl_average_Im_kernel, index, sizeof(cl_mem),
                        (void *)&mem_Im);
   index++;
-  err = clSetKernelArg(m_cl_average_Im_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_average_Im_kernel, index, sizeof(cl_uint),
                        (void *)&width);
   index++;
-  err = clSetKernelArg(m_cl_average_Im_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_average_Im_kernel, index, sizeof(cl_uint),
                        (void *)&height);
   index++;
   err |= clSetKernelArg(m_cl_average_Im_kernel, index, sizeof(cl_mem),
@@ -510,10 +510,10 @@ void MPBAS::PBASImpl::set_arg_pbas_part1(cl_mem &mem_feature, const int &width,
   err = clSetKernelArg(m_cl_pbas_part1_kernel, index, sizeof(cl_mem),
                        (void *)&mem_feature);
   index++;
-  err = clSetKernelArg(m_cl_pbas_part1_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_pbas_part1_kernel, index, sizeof(cl_uint),
                        (void *)&width);
   index++;
-  err = clSetKernelArg(m_cl_pbas_part1_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_pbas_part1_kernel, index, sizeof(cl_uint),
                        (void *)&height);
   index++;
   err |= clSetKernelArg(m_cl_pbas_part1_kernel, index, sizeof(cl_mem),
@@ -529,7 +529,8 @@ void MPBAS::PBASImpl::set_arg_pbas_part1(cl_mem &mem_feature, const int &width,
                         (void *)&mem_index_r);
   index++;
   err |= clSetKernelArg(m_cl_pbas_part1_kernel, index, sizeof(cl_float),
-                        (void *)&average_mag);
+      (void *)&average_mag);
+  MCLASSERT(err);
 }
 
 void MPBAS::PBASImpl::set_arg_pbas_part2(cl_mem &mem_feature, const int width,
@@ -543,10 +544,10 @@ void MPBAS::PBASImpl::set_arg_pbas_part2(cl_mem &mem_feature, const int width,
   err = clSetKernelArg(m_cl_pbas_part2_kernel, index, sizeof(cl_mem),
                        (void *)&mem_feature);
   index++;
-  err = clSetKernelArg(m_cl_pbas_part2_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_pbas_part2_kernel, index, sizeof(cl_uint),
                        (void *)&width);
   index++;
-  err = clSetKernelArg(m_cl_pbas_part2_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_pbas_part2_kernel, index, sizeof(cl_uint),
                        (void *)&height);
   index++;
   err |= clSetKernelArg(m_cl_pbas_part2_kernel, index, sizeof(cl_mem),
@@ -589,6 +590,7 @@ void MPBAS::PBASImpl::set_arg_pbas_part2(cl_mem &mem_feature, const int width,
                           (void *)&m_cl_mem_D[i]);
     index++;
   }
+  MCLASSERT(err);
 }
 
 void MPBAS::PBASImpl::set_arg_update_R_T(cl_mem &mem_mask, const int width,
@@ -599,10 +601,10 @@ void MPBAS::PBASImpl::set_arg_update_R_T(cl_mem &mem_mask, const int width,
   err = clSetKernelArg(m_cl_update_T_R_kernel, index, sizeof(cl_mem),
                        (void *)&mem_mask);
   index++;
-  err = clSetKernelArg(m_cl_update_T_R_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_update_T_R_kernel, index, sizeof(cl_uint),
                        (void *)&width);
   index++;
-  err = clSetKernelArg(m_cl_update_T_R_kernel, index, sizeof(cl_uint),
+  err |= clSetKernelArg(m_cl_update_T_R_kernel, index, sizeof(cl_uint),
                        (void *)&height);
   index++;
   err |= clSetKernelArg(m_cl_update_T_R_kernel, index, sizeof(cl_mem),
@@ -614,4 +616,5 @@ void MPBAS::PBASImpl::set_arg_update_R_T(cl_mem &mem_mask, const int width,
   err |= clSetKernelArg(m_cl_update_T_R_kernel, index, sizeof(cl_mem),
                         (void *)&mem_avrg_d);
   index++;
+  MCLASSERT(err);
 }

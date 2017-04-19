@@ -4,11 +4,11 @@
 
 #include "OCLWork.hpp"
 
-#define DEBUG_RESOLUTION 0
+#define DEBUG_RESOLUTION 1
 
 #if DEBUG_RESOLUTION
-const int WIDTH = 640;
-const int HEIGHT = 480;
+const int WIDTH = 1024;
+const int HEIGHT = 1024;
 
 #else
 const int WIDTH = 320;
