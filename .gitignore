@@ -12,3 +12,13 @@ pbas_impl/Release
 *.user
 *.db
 build
+
+#===== CMake File======
+CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+
+tags
+diplom
+compile_commands.json
