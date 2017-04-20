@@ -1,38 +1,34 @@
 #pragma once
 #include <CL/cl.h>
 #include <opencv2/opencv.hpp>
-#include <string>
-#include <iostream>
-#include <fstream>
+
 #include <chrono>
-
+#include <fstream>
+#include <iostream>
+#include <string>
 #define MCLASSERT(ERR)                                                         \
-  if (ERR != CL_SUCCESS) {                                                     \
-    printf("OpenCL error %s happened in file %s at line %s.\n",                \
-           Utiles::LOG(ERR).data(), __FILE__,                                  \
-           std::to_string(__LINE__).data());                                   \
-    int ibreak;                                                                \
-    ibreak = 0;                                                                \
-  }
+    if (ERR != CL_SUCCESS) {                                                   \
+        printf("OpenCL error %s happened in file %s at line %s.\n",            \
+               utility::Utiles::LOG(ERR).data(), __FILE__,                     \
+               std::to_string(__LINE__).data());                               \
+        int ibreak;                                                            \
+        ibreak = 0;                                                            \
+    }
+namespace utility {
 
-#define MPASSERT(name,data) \
-    if(!data)\
-    {\
-        Utiles::LOG(name, data);\
-        printf("\n"); \
-        getchar(); \
-        exit(-1); \
-    }\
-        else\
-        Utiles::LOG(name, data);\
+#define MPASSERT(name, data)                                                   \
+    if (!data) {                                                               \
+        Utiles::LOG(name, data);                                               \
+        printf("\n");                                                          \
+        getchar();                                                             \
+        exit(-1);                                                              \
+    } else                                                                     \
+        Utiles::LOG(name, data);
 
-#define MATINFO(data)\
-    Utiles::mat_info(data);\
+#define MATINFO(data) Utiles::mat_info(data)
 
-
-class Utiles
-{
-public:
+class Utiles {
+  public:
     Utiles();
     ~Utiles();
     static std::string LOG(cl_uint error_id);
@@ -42,23 +38,15 @@ public:
     static std::string type2str(int type);
 
     static std::string load_program_cl_from_file(const std::string &filename);
-
-
 };
 
-class Timer
-{
-public:
-    Timer(){}
-    ~Timer(){}
-    void start() {
-        _start = std::chrono::system_clock::now();
-    }
-    long long get(){
-        return static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>
-            (std::chrono::system_clock::now() - _start).count());
-    }
-
-private:
-    std::chrono::time_point<std::chrono::system_clock> _start;
-};
+template <typename Func> void timeThis(const std::string &label, Func &&func) {
+    const auto start_time = std::chrono::steady_clock::now();
+    func();
+    const auto end_time = std::chrono::steady_clock::now();
+    const auto duration_ms =
+        std::chrono::duration<double>(end_time - start_time);
+    std::cout << label << duration_ms.count() << " s or "
+              << (duration_ms.count() * 1000.f) << " ms\n";
+}
+}
