@@ -3,7 +3,7 @@
 #include <CL/cl.hpp>
 #include <opencv2/opencv.hpp>
 
-#define DEBUG_RESOLUTION 1
+#define DEBUG_RESOLUTION 0
 
 #if DEBUG_RESOLUTION
 constexpr size_t WIDTH = 1024;
@@ -14,12 +14,14 @@ constexpr size_t WIDTH = 320;
 constexpr size_t HEIGHT = 240;
 #endif
 
-namespace MPBAS {
+namespace MPBAS
+{
 
 #define DEBUG_MODE 0
 constexpr int N = 20;
 
-class PBASImpl {
+class PBASImpl
+{
   public:
     PBASImpl();
     ~PBASImpl() = default;
