@@ -3,7 +3,7 @@
 #include <CL/cl.hpp>
 #include <opencv2/opencv.hpp>
 
-#define DEBUG_RESOLUTION 0
+#define DEBUG_RESOLUTION 1
 
 #if DEBUG_RESOLUTION
 constexpr size_t WIDTH = 1024;
@@ -30,6 +30,8 @@ class PBASImpl
 
   private:
     int _index;
+    cl_uint m_cl_index;
+    cl_float m_cl_avrg_Im;
     cv::RNG randomGenerator;
 
     cl::Context m_context;
@@ -37,10 +39,10 @@ class PBASImpl
     cl::Device m_device;
     cl::CommandQueue m_queue;
     cl::Program m_program;
-    int m_cl_index;
-    cl_float m_cl_avrg_Im;
+
 
     cl::Kernel m_cl_fill_R_T_kernel;
+    cl::Kernel m_cl_fill_model_kernel;
     cl::Kernel m_cl_magnitude_kernel;
     cl::Kernel m_cl_average_Im_kernel;
     cl::Kernel m_cl_pbas_part1_kernel;
@@ -76,6 +78,9 @@ class PBASImpl
                                  const cl_uint &width, const cl_uint &height,
                                  cl_mem &mem_R, cl_int T, cl_int R);
 
+    void set_arg_fill_model(cl_kernel &fill_model_kernel, cl_mem &cl_mem_feature, const cl_uint width, const cl_uint height, const cl_uint cl_index, cl_mem &cl_mem_M);
+
+
     void set_arg_magnitude_kernel(cl_kernel &cl_magnitude_kernel, cl_mem &src,
                                   cl_uint width, cl_uint height, cl_mem &mag);
 
@@ -90,7 +95,7 @@ class PBASImpl
     void set_arg_pbas_part2(cl_kernel &cl_pbas_part2, cl_mem &mem_feature,
                             const int width, const int height, cl_mem &mem_R,
                             cl_mem &mem_T, cl_mem &mem_index_r, cl_uint min_v,
-                            int &cl_index, const int model_size,
+                            const cl_uint cl_index, const cl_uint model_size,
                             cl_mem &mem_mask, cl_mem &mem_avrg_d,
                             cl_mem &mem_rand);
 

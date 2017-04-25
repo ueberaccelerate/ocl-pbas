@@ -31,7 +31,8 @@ void GetPlatformInfoList(cl_platform_id pcl, T... param_name)
     std::initializer_list<int>{(GetPlatformInfo(pcl, param_name), 0)...};
 }
 MPBAS::PBASImpl::PBASImpl()
-    : _index(0), m_cl_index(0), m_cl_avrg_Im(0.f), m_model_index(0) {
+    : _index(0), m_cl_index(0), m_cl_avrg_Im(0.f), m_model_index(0)
+{
     std::cout << "PBASImpl()\n";
     utility::timeThis("Create Context time: ", [&]() {
         //        m_context = cl::Context{CL_DEVICE_TYPE_CPU};
@@ -78,7 +79,8 @@ MPBAS::PBASImpl::PBASImpl()
     create_buffers();
 }
 
-void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask) {
+void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
+{
     // NOTE: OpenCL work position
     assert(src.type() == CV_8UC1);
 
@@ -107,13 +109,16 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask) {
             m_queue.enqueueNDRangeKernel(m_cl_fill_R_T_kernel, cl::NDRange{},
                                          cl::NDRange{WIDTH, HEIGHT});
         }
-        m_queue.enqueueCopyBuffer(m_cl_mem_feature, m_cl_mem_M[m_cl_index], 0,
-                                  0, sizeof(cl_float2) * WIDTH * HEIGHT);
+
+        set_arg_fill_model(m_cl_fill_model_kernel(), m_cl_mem_feature(), WIDTH,
+                           HEIGHT, m_cl_index, m_cl_mem_M());
+        m_queue.enqueueNDRangeKernel(m_cl_fill_model_kernel, cl::NDRange{},
+                                     cl::NDRange{WIDTH, HEIGHT});
         m_cl_index++;
     }
 
     cl_float average_mag = 0;
-    int index_l = 0;
+    cl_uint index_l = 0;
 
     //// WARNING: giving different avrg from cpu process
     m_queue.enqueueFillBuffer(m_cl_mem_avrg_Im, average_mag, 0,
@@ -125,10 +130,9 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask) {
                                  cl::NDRange{WIDTH, HEIGHT});
 
     cl_uint index_r = 0;
-    m_queue.enqueueReadBuffer(m_cl_mem_avrg_Im, true, 0, sizeof(cl_float),
-                              &m_cl_avrg_Im);
-    m_cl_avrg_Im /= WIDTH * HEIGHT;
-
+    /* m_queue.enqueueReadBuffer(m_cl_mem_avrg_Im, true, 0, sizeof(cl_float), */
+    /*                           &m_cl_avrg_Im); */
+    /* m_cl_avrg_Im /= WIDTH * HEIGHT; */
     m_queue.enqueueFillBuffer(m_cl_mem_index_r, index_r, 0,
                               sizeof(cl_uint) * WIDTH * HEIGHT);
 
@@ -143,6 +147,7 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask) {
         index_l++;
     }
 
+    
     set_arg_pbas_part2(m_cl_pbas_part2_kernel(), m_cl_mem_feature(), WIDTH,
                        HEIGHT, m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_index_r(),
                        min, m_cl_index, N, m_cl_mem_mask(), m_cl_mem_avrg_d(),
@@ -162,6 +167,7 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask) {
 void MPBAS::PBASImpl::create_kernels()
 {
     m_cl_fill_R_T_kernel = cl::Kernel{m_program, "fill_T_R"};
+    m_cl_fill_model_kernel = cl::Kernel{m_program, "fill_model"};
     m_cl_magnitude_kernel = cl::Kernel{m_program, "magnitude"};
     m_cl_average_Im_kernel = cl::Kernel{m_program, "average"};
     m_cl_pbas_part1_kernel = cl::Kernel{m_program, "pbas_part1"};
@@ -241,6 +247,29 @@ void MPBAS::PBASImpl::set_arg_fill_R_T_kernel(cl_kernel &m_cl_fill_R_T_kernel,
 
     MCLASSERT(err);
 }
+void MPBAS::PBASImpl::set_arg_fill_model(
+    cl_kernel &fill_model_kernel, cl_mem &cl_mem_feature, const cl_uint width,
+    const cl_uint height, const cl_uint cl_index, cl_mem &cl_mem_M)
+{
+
+    cl_int err;
+    int index = 0;
+    err = clSetKernelArg(fill_model_kernel, index, sizeof(cl_mem),
+                         (void *)&cl_mem_feature);
+    index++;
+    err |= clSetKernelArg(fill_model_kernel, index, sizeof(cl_uint),
+                          (void *)&width);
+    index++;
+    err |= clSetKernelArg(fill_model_kernel, index, sizeof(cl_uint),
+                          (void *)&height);
+    index++;
+    err |= clSetKernelArg(fill_model_kernel, index, sizeof(cl_uint),
+                          (void *)&cl_index);
+    index++;
+    err |= clSetKernelArg(fill_model_kernel, index, sizeof(cl_mem),
+                          (void *)&cl_mem_M);
+    MCLASSERT(err);
+}
 
 void MPBAS::PBASImpl::set_arg_magnitude_kernel(cl_kernel &m_cl_magnitude_kernel,
                                                cl_mem &src, cl_uint width,
@@ -285,7 +314,8 @@ void MPBAS::PBASImpl::set_arg_pbas_part1(cl_kernel &kernel, cl_mem &mem_feature,
                                          cl_mem &mem_R, cl_uint model_index,
                                          cl_mem &mem_D, cl_mem &mem_M,
                                          cl_mem &mem_index_r,
-                                         cl_float average_mag) {
+                                         cl_float average_mag)
+{
     cl_int err;
     int index = 0;
     err = clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_feature);
@@ -313,9 +343,9 @@ void MPBAS::PBASImpl::set_arg_pbas_part2(cl_kernel &kernel, cl_mem &mem_feature,
                                          const int width, const int height,
                                          cl_mem &mem_R, cl_mem &mem_T,
                                          cl_mem &mem_index_r, cl_uint min_v,
-                                         int &cl_index, const int model_size,
-                                         cl_mem &mem_mask, cl_mem &mem_avrg_d,
-                                         cl_mem &mem_rand)
+                                         const cl_uint cl_index,
+                                         const cl_uint model_size, cl_mem &mem_mask,
+                                         cl_mem &mem_avrg_d, cl_mem &mem_rand)
 {
     cl_int err;
     int index = 0;
@@ -333,9 +363,9 @@ void MPBAS::PBASImpl::set_arg_pbas_part2(cl_kernel &kernel, cl_mem &mem_feature,
     index++;
     err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&min_v);
     index++;
-    err |= clSetKernelArg(kernel, index, sizeof(int), (void *)&cl_index);
+    err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&cl_index);
     index++;
-    err |= clSetKernelArg(kernel, index, sizeof(int), (void *)&model_size);
+    err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&model_size);
     index++;
     err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_mask);
     index++;
@@ -343,21 +373,10 @@ void MPBAS::PBASImpl::set_arg_pbas_part2(cl_kernel &kernel, cl_mem &mem_feature,
     index++;
     err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_rand);
     index++;
-    /************************************************************************/
-    /*                            all model                                 */
-    /************************************************************************/
-    for (size_t i = 0; i < N; i++)
-    {
-        err |= clSetKernelArg(kernel, index, sizeof(cl_mem),
-                              (void *)&m_cl_mem_M[i]);
-        index++;
-    }
-    for (size_t i = 0; i < N; i++)
-    {
-        err |=
-            clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_avrg_d);
-        index++;
-    }
+    err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&m_cl_mem_M);
+    index++;
+    err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_avrg_d);
+    index++;
     MCLASSERT(err);
 }
 

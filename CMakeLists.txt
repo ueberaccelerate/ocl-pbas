@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 project(diplom)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_compile_options(-std=c++11)
+add_compile_options(-std=c++11 -O3)
 
 find_package(OpenCL)
 find_package(OpenCV)
