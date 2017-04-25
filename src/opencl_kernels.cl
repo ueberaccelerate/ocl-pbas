@@ -87,38 +87,41 @@ inline float pbas_distance(float I_i, float I_m, float B_i, float B_m,
 }
 
 kernel void pbas_part1(global float2 *feature, const uint width,
-                       const uint height, global float *R, global float *D,
+                       const uint height, global float *R,
+                       const uint model_index, global float *D,
                        global float2 *model, global uint *index_r,
                        const float average_mag) {
-  int idX = get_local_id(0);
-  int idY = get_local_id(1);
-  int ii = get_global_id(0); // == get_global_id(0);
-  int jj = get_global_id(1); // == get_global_id(1);
-  int2 coords = (int2)(ii, jj);
-  int index_d = index_r[jj * width + ii];
-  if (index_d < min_index) {
-    const float I_i = feature[jj * width + ii].x;
-    const float I_m = feature[jj * width + ii].y;
+    int idX = get_local_id(0);
+    int idY = get_local_id(1);
+    int ii = get_global_id(0); // == get_global_id(0);
+    int jj = get_global_id(1); // == get_global_id(1);
 
-    const float r_val = R[jj * width + ii];
+    int2 coords = (int2)(ii, jj);
+    int index_d = index_r[jj * width + ii];
+    if (index_d < min_index) {
+        const float I_i = feature[jj * width + ii].x;
+        const float I_m = feature[jj * width + ii].y;
 
-    const float B_i = model[jj * width + ii].x;
-    const float B_m = model[jj * width + ii].y;
+        const float r_val = R[jj * width + ii];
 
-    const float diff = pbas_distance(I_i, I_m, B_i, B_m, alpha, average_mag);
+        const float B_i = model[jj * width * 20 + ii].x;
+        const float B_m = model[jj * width * 20 + ii].y;
 
-    if (IS_BOUNDS(ii * jj, width * height)) {
+        const float diff =
+            pbas_distance(I_i, I_m, B_i, B_m, alpha, average_mag);
 
-      if (diff < r_val) {
-        if (diff < min_R) {
-          D[jj * width + ii] = diff;
+        if (IS_BOUNDS(ii * jj, width * height)) {
+
+            if (diff < r_val) {
+                if (diff < min_R) {
+                    D[jj * width + ii] = diff;
+                }
+                index_d++;
+            }
         }
-        index_d++;
-      }
     }
-  }
 
-  index_r[jj * width + ii] = index_d;
+    index_r[jj * width + ii] = index_d;
 }
 
 unsigned int lfsr113_Bits(global uint *seed) {

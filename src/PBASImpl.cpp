@@ -27,7 +27,8 @@ template <typename... T>
 void GetPlatformInfoList(cl_platform_id pcl, T... param_name) {
     std::initializer_list<int>{(GetPlatformInfo(pcl, param_name), 0)...};
 }
-MPBAS::PBASImpl::PBASImpl() : _index(0), m_cl_index(0), m_cl_avrg_Im(0.f) {
+MPBAS::PBASImpl::PBASImpl()
+    : _index(0), m_cl_index(0), m_cl_avrg_Im(0.f), m_model_index(0) {
     std::cout << "PBASImpl()\n";
 
     m_context = cl::Context{CL_DEVICE_TYPE_CPU};
@@ -68,39 +69,7 @@ MPBAS::PBASImpl::PBASImpl() : _index(0), m_cl_index(0), m_cl_avrg_Im(0.f) {
 
     // buffer initialize
     create_buffers();
-
-    set_args();
 }
-
-void MPBAS::PBASImpl::calculate_I_and_M(const cv::Mat I,
-                                        std::vector<cv::Mat> &feature) {
-    feature.push_back(I);
-
-    cv::Mat Ix;
-    cv::Mat Iy;
-    cv::Mat Im;
-    cv::Mat Io;
-
-    cv::Sobel(I, Ix, CV_32FC1, 1, 0);
-    cv::Sobel(I, Iy, CV_32FC1, 0, 1);
-    cv::cartToPolar(Ix, Iy, Im, Io);
-
-    feature.push_back(Im);
-
-    Ix.convertTo(Ix, CV_32FC1, 1.f / 255.f);
-    Iy.convertTo(Iy, CV_32FC1, 1.f / 255.f);
-
-    Im.convertTo(Im, CV_32FC1, 1.f / 255.f);
-}
-
-float MPBAS::PBASImpl::distance(float &I_i, float &I_m, float &B_i, float &B_m,
-                                float alpha /*= 0*/, float avarage_m /*= 1*/) {
-    float res =
-        (alpha / avarage_m) * std::abs((I_m - B_m)) + std::abs(I_i - B_i);
-    return res;
-}
-
-void MPBAS::PBASImpl::set_args() {}
 
 void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask) {
     // NOTE: OpenCL work position
@@ -165,9 +134,8 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask) {
 
     while (index_l < m_cl_index) {
         set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(), WIDTH,
-                           HEIGHT, m_cl_mem_R(), m_cl_mem_D[index_l](),
-                           m_cl_mem_M[index_l](), m_cl_mem_index_r(),
-                           m_cl_avrg_Im);
+                           HEIGHT, m_cl_mem_R(), index_l, m_cl_mem_D(),
+                           m_cl_mem_M(), m_cl_mem_index_r(), m_cl_avrg_Im);
         m_queue.enqueueNDRangeKernel(m_cl_pbas_part1_kernel, cl::NDRange{},
                                      cl::NDRange{WIDTH, HEIGHT});
 
@@ -235,27 +203,18 @@ void MPBAS::PBASImpl::create_buffers() {
         cl::Buffer{m_context, CL_MEM_READ_WRITE,
                    sizeof(cl_uint) * WIDTH * HEIGHT, nullptr};
 
-    for (size_t i = 0; i < N; i++) {
-        m_cl_mem_M[i] = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                                   sizeof(cl_float2) * WIDTH * HEIGHT, nullptr};
-    }
-    for (size_t i = 0; i < N; i++) {
-        m_cl_mem_D[i] = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                                   sizeof(cl_float) * WIDTH * HEIGHT, nullptr};
-    }
-    cl_event e{};
-    cl_uint index_r = 0;
+    // sizeof(cl_float2) * WIDTH * HEIGHT * N = 8 * 320 * 240 * 20
+    m_cl_mem_M = cl::Buffer{m_context, CL_MEM_READ_WRITE,
+                            sizeof(cl_float2) * WIDTH * HEIGHT * N, nullptr};
+    // sizeof(cl_float) * WIDTH * HEIGHT * N = 4 * 320 * 240 * 20
+    m_cl_mem_D = cl::Buffer{m_context, CL_MEM_READ_WRITE,
+                            sizeof(cl_float) * WIDTH * HEIGHT * N, nullptr};
 
+    cl_uint index_r = 0;
     m_queue.enqueueFillBuffer(m_cl_mem_index_r, index_r, 0,
                               sizeof(cl_uint) * WIDTH * HEIGHT);
 
-    // cl_float average_d = 0.f;
-    // m_work.enqueue_buffer_fill(m_cl_mem_index_r,
-    //                           sizeof(cl_float) * WIDTH * HEIGHT, &average_d,
-    //                           sizeof(cl_uint), e);
-
     std::vector<cl_uint> r_numbers;
-
     std::generate_n(std::back_insert_iterator<std::vector<cl_uint>>(r_numbers),
                     (WIDTH * HEIGHT), randomGenerator);
     m_queue.enqueueWriteBuffer(m_cl_mem_random_numbers, true, 0,
@@ -327,8 +286,9 @@ void MPBAS::PBASImpl::set_arg_average_Im(cl_kernel &kernel, cl_mem &mem_Im,
 
 void MPBAS::PBASImpl::set_arg_pbas_part1(cl_kernel &kernel, cl_mem &mem_feature,
                                          const int &width, const int &height,
-                                         cl_mem &mem_R, cl_mem &mem_D,
-                                         cl_mem &mem_M, cl_mem &mem_index_r,
+                                         cl_mem &mem_R, cl_uint model_index,
+                                         cl_mem &mem_D, cl_mem &mem_M,
+                                         cl_mem &mem_index_r,
                                          cl_float average_mag) {
     cl_int err;
     int index = 0;
@@ -339,6 +299,8 @@ void MPBAS::PBASImpl::set_arg_pbas_part1(cl_kernel &kernel, cl_mem &mem_feature,
     err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&height);
     index++;
     err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_R);
+    index++;
+    err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&model_index);
     index++;
     err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_D);
     index++;

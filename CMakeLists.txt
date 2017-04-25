@@ -9,6 +9,7 @@ find_package(OpenCV)
 
 file(COPY ${CMAKE_SOURCE_DIR}/.clang-format DESTINATION ${CMAKE_BINARY_DIR})
 
+
 file ( GLOB_RECURSE CL_SOURCES src/*.cl)
 file ( GLOB_RECURSE HPP_SOURCES src/*.hpp)
 aux_source_directory( src SOURCES)

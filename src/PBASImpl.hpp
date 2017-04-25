@@ -23,22 +23,12 @@ class PBASImpl {
   public:
     PBASImpl();
     ~PBASImpl() = default;
-    void calculate_I_and_M(const cv::Mat I, std::vector<cv::Mat> &feature);
-
-    float distance(float &I_i, float &I_m, float &B_i, float &B_m,
-                   float alpha = 0, float avarage_m = 1);
 
     void process(cv::Mat src, cv::Mat &mask);
 
   private:
     int _index;
     cv::RNG randomGenerator;
-    /*
-    // ===========================
-    //
-    // NOTE: OpenCL 1.2
-    //
-    */
 
     cl::Context m_context;
     cl::Platform m_platform;
@@ -63,8 +53,11 @@ class PBASImpl {
     cl::Buffer m_cl_mem_feature;
     cl::Buffer m_cl_mem_avrg_Im;
     cl::Buffer m_cl_mem_index_r;
-    cl::Buffer m_cl_mem_D[N];
-    cl::Buffer m_cl_mem_M[N];
+
+    cl_uint m_model_index;
+    cl::Buffer m_cl_mem_D;
+    cl::Buffer m_cl_mem_M;
+
     cl::Buffer m_cl_mem_mask;
     cl::Buffer m_cl_mem_avrg_d;
     cl::Buffer m_cl_mem_R;
@@ -76,8 +69,6 @@ class PBASImpl {
 
     void create_kernels();
     void create_buffers();
-
-    void set_args();
 
     void set_arg_fill_R_T_kernel(cl_kernel &cl_fill_R_T_kernel, cl_mem &mem_T,
                                  const cl_uint &width, const cl_uint &height,
@@ -91,8 +82,8 @@ class PBASImpl {
 
     void set_arg_pbas_part1(cl_kernel &cl_pbas_part1, cl_mem &mem_feature,
                             const int &width, const int &height, cl_mem &mem_R,
-                            cl_mem &mem_D, cl_mem &mem_M, cl_mem &mem_index_r,
-                            cl_float average_mag);
+                            cl_uint model_index, cl_mem &mem_D, cl_mem &mem_M,
+                            cl_mem &mem_index_r, cl_float average_mag);
 
     void set_arg_pbas_part2(cl_kernel &cl_pbas_part2, cl_mem &mem_feature,
                             const int width, const int height, cl_mem &mem_R,
