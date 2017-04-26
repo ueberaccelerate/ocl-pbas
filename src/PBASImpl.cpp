@@ -35,18 +35,18 @@ MPBAS::PBASImpl::PBASImpl()
 {
     std::cout << "PBASImpl()\n";
     utility::timeThis("Create Context time: ", [&]() {
-        // m_context = cl::Context{CL_DEVICE_TYPE_CPU};
-        // std::vector<cl::Platform> platforms;
+        m_context = cl::Context{CL_DEVICE_TYPE_CPU};
+        std::vector<cl::Platform> platforms;
 
-        // cl::Platform::get(&platforms);
-        // m_platform = platforms[1];
-        // m_device = cl::Device::getDefault();
-        // m_queue = cl::CommandQueue(m_context);
-
-        m_context = cl::Context::getDefault();
-        m_platform = cl::Platform::getDefault();
+        cl::Platform::get(&platforms);
+        m_platform = platforms[1];
         m_device = cl::Device::getDefault();
         m_queue = cl::CommandQueue(m_context);
+
+        // m_context = cl::Context::getDefault();
+        // m_platform = cl::Platform::getDefault();
+        // m_device = cl::Device::getDefault();
+        // m_queue = cl::CommandQueue(m_context);
 
         std::fstream stream{"../src/opencl_kernels.cl", std::ios::in};
         std::string sourceSample =

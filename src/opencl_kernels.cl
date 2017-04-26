@@ -128,13 +128,13 @@ kernel void magnitude(global uchar *src, const uint width, const uint height,
     }
 }
 
-float pbas_distance(float I_i, float I_m, float B_i, float B_m, float alpha,
-                    float avarage_m)
+inline float pbas_distance(const float I_i, const float I_m, const float B_i, const float B_m, const float alpha,
+    const float avarage_m)
 {
-    float Im_diff = abs_diff((int)(I_m), (int)(B_m));
-    float Ii_diff = abs_diff((int)(I_i), (int)(B_i));
+    const float Im_diff = abs_diff((int)(I_m), (int)(B_m));
+    const float Ii_diff = abs_diff((int)(I_i), (int)(B_i));
 
-    float res = (alpha / avarage_m) * Im_diff + Ii_diff;
+    const float res = (alpha / avarage_m) * Im_diff + Ii_diff;
     return res;
 }
 
