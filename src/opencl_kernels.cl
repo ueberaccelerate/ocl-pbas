@@ -2,7 +2,7 @@
 
 #define SK_SIZE 3
 
-constant float min_R = 20.f;
+constant float min_R = 18.f;
 constant int min_index = 2;
 constant float R_inc_dec = 0.05f;
 constant int R_scale = 5;
@@ -140,7 +140,7 @@ float pbas_distance(float I_i, float I_m, float B_i, float B_m, float alpha,
 
 kernel void pbas_part1(global float2 *feature, const uint width,
                        const uint height, global float *R,
-                       const uint model_index, global float *D,
+                       const uint total_model_index, global float *D,
                        global float2 *model, global uint *index_r,
                        const float average_mag)
 {
@@ -148,13 +148,14 @@ kernel void pbas_part1(global float2 *feature, const uint width,
     int jj = get_global_id(1);
 
     int2 coords = (int2)(ii, jj);
-    int index_d = index_r[jj * width + ii];
-    if (index_d < min_index)
+    int index_d = 0;//index_r[jj * width + ii];
+    int i = 0;
+    while (index_d < min_index && i < total_model_index)
     {
         const float2 I_val = feature[jj * width + ii];
         const float r_val = R[jj * width + ii];
         const float2 B_val =
-            model[jj * width * model_size + ii * model_size + model_index];
+            model[jj * width * model_size + ii * model_size + i];
 
         const float diff = pbas_distance(I_val.x, I_val.y, B_val.x, B_val.y,
                                          alpha, average_mag);
@@ -163,16 +164,14 @@ kernel void pbas_part1(global float2 *feature, const uint width,
         {
             if (diff < min_R)
             {
-                 D[jj * width * model_size + ii * model_size + model_index] =
-                  diff;
+                D[jj * width * model_size + ii * model_size + i] = diff;
             }
             index_d++;
         }
 
-    index_r[jj * width + ii] = index_d;
+        index_r[jj * width + ii] = index_d;
+        ++i;
     }
-
-
 }
 
 // NOTE model in range [0 ... model_size]
@@ -218,12 +217,11 @@ kernel void pbas_part2(global float2 *feature, const uint width,
                                           ii * model_size + random_model_index;
                     model[pos_model] = (float2)(I_i, I_m);
 
-                    /* for (int i = 0; i < model_size; ++i) */
-                    /* { */
-                    /*     avr += D[jj * width * model_size + ii * model_size +
-                     * i]; */
-                    /* } */
-                    /* avr /= model_size; */
+                     for (int i = 0; i < model_size; ++i) 
+                     { 
+                         avr += D[jj * width * model_size + ii * model_size + i]; 
+                     } 
+                     avr /= model_size; 
                 }
             }
             rand_T = lfsr113_Bits(&rand_n[jj * width + ii]) % T_upper;
@@ -252,7 +250,7 @@ kernel void pbas_part2(global float2 *feature, const uint width,
     /* if (IS_BOUNDS(ii * jj, width * height)) */
     {
         mask[jj * width + ii] = color;
-        /* avrg_d[jj * width + ii] = avr; */
+        avrg_d[jj * width + ii] = avr; 
     }
 }
 

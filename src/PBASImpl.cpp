@@ -35,9 +35,9 @@ MPBAS::PBASImpl::PBASImpl()
 {
     std::cout << "PBASImpl()\n";
     utility::timeThis("Create Context time: ", [&]() {
-        //        m_context = cl::Context{CL_DEVICE_TYPE_CPU};
-        //        std::vector<cl::Platform> platforms;
-        //
+        // m_context = cl::Context{CL_DEVICE_TYPE_CPU};
+        // std::vector<cl::Platform> platforms;
+
         // cl::Platform::get(&platforms);
         // m_platform = platforms[1];
         // m_device = cl::Device::getDefault();
@@ -48,9 +48,7 @@ MPBAS::PBASImpl::PBASImpl()
         m_device = cl::Device::getDefault();
         m_queue = cl::CommandQueue(m_context);
 
-        std::fstream stream{
-            "/home/vsuboch/Projects/diplom/src/opencl_kernels.cl",
-            std::ios::in};
+        std::fstream stream{"../src/opencl_kernels.cl", std::ios::in};
         std::string sourceSample =
             std::string((std::istreambuf_iterator<char>(stream)),
                         std::istreambuf_iterator<char>());
@@ -78,14 +76,14 @@ MPBAS::PBASImpl::PBASImpl()
     // buffer initialize
     create_buffers();
 
-    set_args();
+    // set_args();
 }
 void MPBAS::PBASImpl::set_args()
 {
 
     set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(), WIDTH,
-                       HEIGHT, m_cl_mem_R(), 0, m_cl_mem_D(),
-                       m_cl_mem_M(), m_cl_mem_index_r(), m_cl_avrg_Im);
+                       HEIGHT, m_cl_mem_R(), 0, m_cl_mem_D(), m_cl_mem_M(),
+                       m_cl_mem_index_r(), m_cl_avrg_Im);
 }
 
 void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
@@ -127,7 +125,6 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
     }
 
     cl_float average_mag = 0;
-    cl_uint index_l = 0;
 
     //// WARNING: giving different avrg from cpu process
     m_queue.enqueueFillBuffer(m_cl_mem_avrg_Im, average_mag, 0,
@@ -145,35 +142,24 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
     m_queue.enqueueFillBuffer(m_cl_mem_index_r, index_r, 0,
                               sizeof(cl_uint) * WIDTH * HEIGHT);
 
-    while (index_l < m_cl_index)
-    {
-        set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(), WIDTH,
-                           HEIGHT, m_cl_mem_R(), index_l, m_cl_mem_D(),
-                           m_cl_mem_M(), m_cl_mem_index_r(), m_cl_avrg_Im);
+    set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(), WIDTH,
+                       HEIGHT, m_cl_mem_R(), m_cl_index, m_cl_mem_D(),
+                       m_cl_mem_M(), m_cl_mem_index_r(), m_cl_avrg_Im);
+    m_queue.enqueueNDRangeKernel(m_cl_pbas_part1_kernel, cl::NDRange{},
+                                 cl::NDRange{WIDTH, HEIGHT});
 
-        m_cl_pbas_part1_kernel.setArg(
+    set_arg_pbas_part2(m_cl_pbas_part2_kernel(), m_cl_mem_feature(), WIDTH,
+                       HEIGHT, m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_index_r(),
+                       min, m_cl_index, N, m_cl_mem_mask(), m_cl_mem_avrg_d(),
+                       m_cl_mem_random_numbers());
+    m_queue.enqueueNDRangeKernel(m_cl_pbas_part2_kernel, cl::NDRange{},
+                                 cl::NDRange{WIDTH, HEIGHT});
 
-        m_queue.enqueueNDRangeKernel(m_cl_pbas_part1_kernel, cl::NDRange{},
-                                     cl::NDRange{WIDTH, HEIGHT});
-        index_l++;
-    }
+    set_arg_update_R_T(m_cl_update_T_R_kernel(), m_cl_mem_mask(), WIDTH, HEIGHT,
+                       m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_avrg_d());
 
-    /* set_arg_pbas_part2(m_cl_pbas_part2_kernel(), m_cl_mem_feature(), WIDTH,
-     */
-    /*                    HEIGHT, m_cl_mem_R(), m_cl_mem_T(),
-     * m_cl_mem_index_r(), */
-    /*                    min, m_cl_index, N, m_cl_mem_mask(),
-     * m_cl_mem_avrg_d(), */
-    /*                    m_cl_mem_random_numbers()); */
-    /* m_queue.enqueueNDRangeKernel(m_cl_pbas_part2_kernel, cl::NDRange{}, */
-    /*                              cl::NDRange{WIDTH, HEIGHT}); */
-
-    /* set_arg_update_R_T(m_cl_update_T_R_kernel(), m_cl_mem_mask(), WIDTH,
-     * HEIGHT, */
-    /*                    m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_avrg_d()); */
-
-    /* m_queue.enqueueNDRangeKernel(m_cl_update_T_R_kernel, cl::NDRange{}, */
-    /*                              cl::NDRange{WIDTH, HEIGHT}); */
+    m_queue.enqueueNDRangeKernel(m_cl_update_T_R_kernel, cl::NDRange{},
+                                 cl::NDRange{WIDTH, HEIGHT});
     m_queue.enqueueReadBuffer(m_cl_mem_mask, true, 0, WIDTH * HEIGHT,
                               mask.data);
 }
@@ -387,7 +373,7 @@ void MPBAS::PBASImpl::set_arg_pbas_part2(
     index++;
     err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&m_cl_mem_M);
     index++;
-    err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_avrg_d);
+    err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&m_cl_mem_D);
     index++;
     MCLASSERT(err);
 }
