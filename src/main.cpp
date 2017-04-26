@@ -4,8 +4,8 @@
 int main()
 {
     /* cv::VideoCapture cap("../dataset/highwayI.avi"); */
-    cv::VideoCapture cap("../dataset/Crowded1.avi");
-    // cv::VideoCapture cap(0);
+    // cv::VideoCapture cap("../dataset/Crowded1.avi");
+    cv::VideoCapture cap(0);
 
     MPBAS::PBASImpl pbas_m;
     cv::Mat input;

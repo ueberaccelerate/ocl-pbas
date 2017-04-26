@@ -35,18 +35,18 @@ MPBAS::PBASImpl::PBASImpl()
 {
     std::cout << "PBASImpl()\n";
     utility::timeThis("Create Context time: ", [&]() {
-        m_context = cl::Context{CL_DEVICE_TYPE_CPU};
-        std::vector<cl::Platform> platforms;
+        // m_context = cl::Context{CL_DEVICE_TYPE_CPU};
+        // std::vector<cl::Platform> platforms;
 
-        cl::Platform::get(&platforms);
-        m_platform = platforms[1];
-        m_device = cl::Device::getDefault();
-        m_queue = cl::CommandQueue(m_context);
-
-        // m_context = cl::Context::getDefault();
-        // m_platform = cl::Platform::getDefault();
+        // cl::Platform::get(&platforms);
+        // m_platform = platforms[1];
         // m_device = cl::Device::getDefault();
         // m_queue = cl::CommandQueue(m_context);
+
+        m_context = cl::Context::getDefault();
+        m_platform = cl::Platform::getDefault();
+        m_device = cl::Device::getDefault();
+        m_queue = cl::CommandQueue(m_context);
 
         std::fstream stream{"../src/opencl_kernels.cl", std::ios::in};
         std::string sourceSample =
@@ -71,19 +71,11 @@ MPBAS::PBASImpl::PBASImpl()
         }
     });
     // kernels initialize
-    create_kernels();
+    utility::timeThis("Create Kernels time: ", [&]() { create_kernels(); });
 
     // buffer initialize
-    create_buffers();
 
-    // set_args();
-}
-void MPBAS::PBASImpl::set_args()
-{
-
-    set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(), WIDTH,
-                       HEIGHT, m_cl_mem_R(), 0, m_cl_mem_D(), m_cl_mem_M(),
-                       m_cl_mem_index_r(), m_cl_avrg_Im);
+    utility::timeThis("Create Buffers time: ", [&]() { create_buffers(); });
 }
 
 void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
@@ -139,8 +131,6 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
     m_queue.enqueueReadBuffer(m_cl_mem_avrg_Im, true, 0, sizeof(cl_float),
                               &m_cl_avrg_Im);
     m_cl_avrg_Im /= WIDTH * HEIGHT;
-    m_queue.enqueueFillBuffer(m_cl_mem_index_r, index_r, 0,
-                              sizeof(cl_uint) * WIDTH * HEIGHT);
 
     set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(), WIDTH,
                        HEIGHT, m_cl_mem_R(), m_cl_index, m_cl_mem_D(),
@@ -219,7 +209,7 @@ void MPBAS::PBASImpl::create_buffers()
                                r_numbers.data());
 }
 
-void MPBAS::PBASImpl::set_arg_fill_R_T_kernel(cl_kernel &m_cl_fill_R_T_kernel,
+void MPBAS::PBASImpl::set_arg_fill_R_T_kernel(cl_kernel &cl_fill_R_T_kernel,
                                               cl_mem &mem_T,
                                               const cl_uint &width,
                                               const cl_uint &height,
@@ -227,23 +217,23 @@ void MPBAS::PBASImpl::set_arg_fill_R_T_kernel(cl_kernel &m_cl_fill_R_T_kernel,
 {
     cl_int err;
     int index = 0;
-    err = clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_mem),
+    err = clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_mem),
                          (void *)&mem_T);
     index++;
-    err |= clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_mem),
+    err |= clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_mem),
                           (void *)&mem_R);
     index++;
-    err |= clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_uint),
+    err |= clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_uint),
                           (void *)&width);
     index++;
-    err |= clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_uint),
+    err |= clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_uint),
                           (void *)&height);
     index++;
     err |=
-        clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_int), (void *)&T);
+        clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_int), (void *)&T);
     index++;
     err |=
-        clSetKernelArg(m_cl_fill_R_T_kernel, index, sizeof(cl_int), (void *)&R);
+        clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_int), (void *)&R);
 
     MCLASSERT(err);
 }
@@ -271,22 +261,22 @@ void MPBAS::PBASImpl::set_arg_fill_model(
     MCLASSERT(err);
 }
 
-void MPBAS::PBASImpl::set_arg_magnitude_kernel(cl_kernel &m_cl_magnitude_kernel,
+void MPBAS::PBASImpl::set_arg_magnitude_kernel(cl_kernel &cl_magnitude_kernel,
                                                cl_mem &src, cl_uint width,
                                                cl_uint height, cl_mem &mag)
 {
     cl_int err;
     int index = 0;
-    err = clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_mem),
+    err = clSetKernelArg(cl_magnitude_kernel, index, sizeof(cl_mem),
                          (void *)&src);
     index++;
-    err |= clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_uint),
+    err |= clSetKernelArg(cl_magnitude_kernel, index, sizeof(cl_uint),
                           (void *)&width);
     index++;
-    err |= clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_uint),
+    err |= clSetKernelArg(cl_magnitude_kernel, index, sizeof(cl_uint),
                           (void *)&height);
     index++;
-    err |= clSetKernelArg(m_cl_magnitude_kernel, index, sizeof(cl_mem),
+    err |= clSetKernelArg(cl_magnitude_kernel, index, sizeof(cl_mem),
                           (void *)&mag);
 
     MCLASSERT(err);
