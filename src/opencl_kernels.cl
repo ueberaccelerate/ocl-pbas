@@ -2,7 +2,7 @@
 
 #define SK_SIZE 3
 
-constant float min_R = 200.f;
+constant float min_R = 20.f;
 constant int min_index = 2;
 constant float R_inc_dec = 0.05f;
 constant int R_scale = 5;
@@ -128,13 +128,13 @@ kernel void magnitude(global uchar *src, const uint width, const uint height,
     }
 }
 
-inline float pbas_distance(float I_i, float I_m, float B_i, float B_m,
-                           float alpha, float avarage_m)
+float pbas_distance(float I_i, float I_m, float B_i, float B_m, float alpha,
+                    float avarage_m)
 {
     float Im_diff = abs_diff((int)(I_m), (int)(B_m));
     float Ii_diff = abs_diff((int)(I_i), (int)(B_i));
 
-    float res = (alpha /* avarage_m*/) * Im_diff + Ii_diff;
+    float res = (alpha / avarage_m) * Im_diff + Ii_diff;
     return res;
 }
 
@@ -158,18 +158,21 @@ kernel void pbas_part1(global float2 *feature, const uint width,
 
         const float diff = pbas_distance(I_val.x, I_val.y, B_val.x, B_val.y,
                                          alpha, average_mag);
+
         if (diff < r_val)
         {
             if (diff < min_R)
             {
-                D[jj * width * model_size + ii * model_size + model_index] =
-                    diff;
+                 D[jj * width * model_size + ii * model_size + model_index] =
+                  diff;
             }
             index_d++;
         }
-    }
 
     index_r[jj * width + ii] = index_d;
+    }
+
+
 }
 
 // NOTE model in range [0 ... model_size]
@@ -217,7 +220,8 @@ kernel void pbas_part2(global float2 *feature, const uint width,
 
                     /* for (int i = 0; i < model_size; ++i) */
                     /* { */
-                    /*     avr += D[jj * width * model_size + ii * model_size + i]; */
+                    /*     avr += D[jj * width * model_size + ii * model_size +
+                     * i]; */
                     /* } */
                     /* avr /= model_size; */
                 }

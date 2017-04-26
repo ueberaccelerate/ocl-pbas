@@ -77,6 +77,15 @@ MPBAS::PBASImpl::PBASImpl()
 
     // buffer initialize
     create_buffers();
+
+    set_args();
+}
+void MPBAS::PBASImpl::set_args()
+{
+
+    set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(), WIDTH,
+                       HEIGHT, m_cl_mem_R(), 0, m_cl_mem_D(),
+                       m_cl_mem_M(), m_cl_mem_index_r(), m_cl_avrg_Im);
 }
 
 void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
@@ -130,9 +139,9 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
                                  cl::NDRange{WIDTH, HEIGHT});
 
     cl_uint index_r = 0;
-    /* m_queue.enqueueReadBuffer(m_cl_mem_avrg_Im, true, 0, sizeof(cl_float), */
-    /*                           &m_cl_avrg_Im); */
-    /* m_cl_avrg_Im /= WIDTH * HEIGHT; */
+    m_queue.enqueueReadBuffer(m_cl_mem_avrg_Im, true, 0, sizeof(cl_float),
+                              &m_cl_avrg_Im);
+    m_cl_avrg_Im /= WIDTH * HEIGHT;
     m_queue.enqueueFillBuffer(m_cl_mem_index_r, index_r, 0,
                               sizeof(cl_uint) * WIDTH * HEIGHT);
 
@@ -141,25 +150,30 @@ void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
         set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(), WIDTH,
                            HEIGHT, m_cl_mem_R(), index_l, m_cl_mem_D(),
                            m_cl_mem_M(), m_cl_mem_index_r(), m_cl_avrg_Im);
+
+        m_cl_pbas_part1_kernel.setArg(
+
         m_queue.enqueueNDRangeKernel(m_cl_pbas_part1_kernel, cl::NDRange{},
                                      cl::NDRange{WIDTH, HEIGHT});
-
         index_l++;
     }
 
-    
-    set_arg_pbas_part2(m_cl_pbas_part2_kernel(), m_cl_mem_feature(), WIDTH,
-                       HEIGHT, m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_index_r(),
-                       min, m_cl_index, N, m_cl_mem_mask(), m_cl_mem_avrg_d(),
-                       m_cl_mem_random_numbers());
-    m_queue.enqueueNDRangeKernel(m_cl_pbas_part2_kernel, cl::NDRange{},
-                                 cl::NDRange{WIDTH, HEIGHT});
+    /* set_arg_pbas_part2(m_cl_pbas_part2_kernel(), m_cl_mem_feature(), WIDTH,
+     */
+    /*                    HEIGHT, m_cl_mem_R(), m_cl_mem_T(),
+     * m_cl_mem_index_r(), */
+    /*                    min, m_cl_index, N, m_cl_mem_mask(),
+     * m_cl_mem_avrg_d(), */
+    /*                    m_cl_mem_random_numbers()); */
+    /* m_queue.enqueueNDRangeKernel(m_cl_pbas_part2_kernel, cl::NDRange{}, */
+    /*                              cl::NDRange{WIDTH, HEIGHT}); */
 
-    set_arg_update_R_T(m_cl_update_T_R_kernel(), m_cl_mem_mask(), WIDTH, HEIGHT,
-                       m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_avrg_d());
+    /* set_arg_update_R_T(m_cl_update_T_R_kernel(), m_cl_mem_mask(), WIDTH,
+     * HEIGHT, */
+    /*                    m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_avrg_d()); */
 
-    m_queue.enqueueNDRangeKernel(m_cl_update_T_R_kernel, cl::NDRange{},
-                                 cl::NDRange{WIDTH, HEIGHT});
+    /* m_queue.enqueueNDRangeKernel(m_cl_update_T_R_kernel, cl::NDRange{}, */
+    /*                              cl::NDRange{WIDTH, HEIGHT}); */
     m_queue.enqueueReadBuffer(m_cl_mem_mask, true, 0, WIDTH * HEIGHT,
                               mask.data);
 }
@@ -339,13 +353,11 @@ void MPBAS::PBASImpl::set_arg_pbas_part1(cl_kernel &kernel, cl_mem &mem_feature,
     MCLASSERT(err);
 }
 
-void MPBAS::PBASImpl::set_arg_pbas_part2(cl_kernel &kernel, cl_mem &mem_feature,
-                                         const int width, const int height,
-                                         cl_mem &mem_R, cl_mem &mem_T,
-                                         cl_mem &mem_index_r, cl_uint min_v,
-                                         const cl_uint cl_index,
-                                         const cl_uint model_size, cl_mem &mem_mask,
-                                         cl_mem &mem_avrg_d, cl_mem &mem_rand)
+void MPBAS::PBASImpl::set_arg_pbas_part2(
+    cl_kernel &kernel, cl_mem &mem_feature, const int width, const int height,
+    cl_mem &mem_R, cl_mem &mem_T, cl_mem &mem_index_r, cl_uint min_v,
+    const cl_uint cl_index, const cl_uint model_size, cl_mem &mem_mask,
+    cl_mem &mem_avrg_d, cl_mem &mem_rand)
 {
     cl_int err;
     int index = 0;

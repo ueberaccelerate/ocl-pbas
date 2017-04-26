@@ -73,6 +73,8 @@ class PBASImpl
 
     void create_kernels();
     void create_buffers();
+    
+    void set_args();
 
     void set_arg_fill_R_T_kernel(cl_kernel &cl_fill_R_T_kernel, cl_mem &mem_T,
                                  const cl_uint &width, const cl_uint &height,
