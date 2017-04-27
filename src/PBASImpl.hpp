@@ -3,35 +3,36 @@
 #include <CL/cl.hpp>
 #include <opencv2/opencv.hpp>
 
-#define DEBUG_RESOLUTION 1
-
-#if DEBUG_RESOLUTION
-constexpr size_t WIDTH = 1024;
-constexpr size_t HEIGHT = 1024;
-
-#else
-constexpr size_t WIDTH = 320;
-constexpr size_t HEIGHT = 240;
-#endif
-
-namespace MPBAS
+struct PBASParameter
 {
+  cl_uint imageWidth;
+  cl_uint imageHeight;
+  cl_uint modelSize = 20;
+  cl_uint minModels = 2;
+  cl_uint T_lower = 2;
+  cl_uint R_lower = 10;
 
-#define DEBUG_MODE 0
-constexpr int N = 20;
+  constexpr PBASParameter(cl_uint width, cl_uint height)
+      : imageWidth(width), imageHeight(height)
+  {
+  }
+};
 
 class PBASImpl
 {
 public:
-  PBASImpl();
+  PBASImpl(const PBASParameter param);
   ~PBASImpl() = default;
 
   void process(cv::Mat src, cv::Mat &mask);
 
 private:
-  int _index;
-  cl_uint m_cl_index;
-  cl_float m_cl_avrg_Im;
+  PBASParameter m_parameters;
+
+  cl_uint m_cl_index = 0;
+
+  cl_float m_cl_avrg_Im = 0.f;
+
   cv::RNG randomGenerator;
 
   cl::Context m_context;
@@ -102,5 +103,4 @@ private:
   void set_arg_update_R_T(cl_kernel &cl_update_R_T, cl_mem &mem_mask,
                           const int width, const int height, cl_mem &mem_R,
                           cl_mem &mem_T, cl_mem &mem_avrg_d);
-};
 };

@@ -4,17 +4,6 @@
 #include <iterator>
 #include <vector>
 
-// NOTE: define
-#define DEBUG_MEM_CL 0
-//#undef MCLASSERT
-//#define MCLASSERT(ERR) ;
-namespace MPBAS
-{
-cl_int R_lower = 20;
-cl_int T_lower = 2;
-const int min = 2;
-} // namespace MPBAS
-
 void GetPlatformInfo(cl_platform_id pcl, cl_platform_info param_name)
 {
   std::size_t param_size;
@@ -30,8 +19,9 @@ void GetPlatformInfoList(cl_platform_id pcl, T... param_name)
 {
   std::initializer_list<int>{(GetPlatformInfo(pcl, param_name), 0)...};
 }
-MPBAS::PBASImpl::PBASImpl()
-    : _index(0), m_cl_index(0), m_cl_avrg_Im(0.f), m_model_index(0)
+
+PBASImpl::PBASImpl(const PBASParameter param)
+    : m_parameters(param), m_cl_index(0), m_cl_avrg_Im(0.f), m_model_index(0)
 {
   std::cout << "PBASImpl()\n";
   utility::timeThis("Create Context time: ", [&]() {
@@ -78,81 +68,92 @@ MPBAS::PBASImpl::PBASImpl()
   utility::timeThis("Create Buffers time: ", [&]() { create_buffers(); });
 }
 
-void MPBAS::PBASImpl::process(cv::Mat src, cv::Mat &mask)
+void PBASImpl::process(cv::Mat src, cv::Mat &mask)
 {
   // NOTE: OpenCL work position
   assert(src.type() == CV_8UC1);
 
-  mask = cv::Mat::zeros(HEIGHT, WIDTH, CV_8UC1);
-  m_queue.enqueueWriteBuffer(m_cl_mem_I, true, 0, WIDTH * HEIGHT, src.data);
+  mask = cv::Mat::zeros(m_parameters.imageHeight, m_parameters.imageWidth,
+                        CV_8UC1);
+  m_queue.enqueueWriteBuffer(m_cl_mem_I, true, 0,
+                             m_parameters.imageWidth * m_parameters.imageHeight,
+                             src.data);
 
-  set_arg_magnitude_kernel(m_cl_magnitude_kernel(), m_cl_mem_I(), WIDTH, HEIGHT,
+  set_arg_magnitude_kernel(m_cl_magnitude_kernel(), m_cl_mem_I(),
+                           m_parameters.imageWidth, m_parameters.imageHeight,
                            m_cl_mem_feature());
-  m_queue.enqueueNDRangeKernel(m_cl_magnitude_kernel, cl::NDRange{},
-                               cl::NDRange{WIDTH, HEIGHT});
+  m_queue.enqueueNDRangeKernel(
+      m_cl_magnitude_kernel, cl::NDRange{},
+      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
 
-#if DEBUG_MEM_CL
-  cv::Mat test = cv::Mat(HEIGHT, WIDTH, CV_8UC1);
-  m_work.enqueue_buffer_read(m_cl_mem_I, WIDTH * HEIGHT, test.data, e);
-
-  cv::imshow("test", test);
-#endif
-
-  if (m_cl_index < N)
+  if (m_cl_index < m_parameters.modelSize)
   {
     if (m_cl_index == 0)
     {
-      set_arg_fill_R_T_kernel(m_cl_fill_R_T_kernel(), m_cl_mem_T(), WIDTH,
-                              HEIGHT, m_cl_mem_R(), T_lower, R_lower);
+      set_arg_fill_R_T_kernel(m_cl_fill_R_T_kernel(), m_cl_mem_T(),
+                              m_parameters.imageWidth, m_parameters.imageHeight,
+                              m_cl_mem_R(), m_parameters.T_lower,
+                              m_parameters.R_lower);
 
-      m_queue.enqueueNDRangeKernel(m_cl_fill_R_T_kernel, cl::NDRange{},
-                                   cl::NDRange{WIDTH, HEIGHT});
+      m_queue.enqueueNDRangeKernel(
+          m_cl_fill_R_T_kernel, cl::NDRange{},
+          cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
     }
 
-    set_arg_fill_model(m_cl_fill_model_kernel(), m_cl_mem_feature(), WIDTH,
-                       HEIGHT, m_cl_index, m_cl_mem_M());
-    m_queue.enqueueNDRangeKernel(m_cl_fill_model_kernel, cl::NDRange{},
-                                 cl::NDRange{WIDTH, HEIGHT});
+    set_arg_fill_model(m_cl_fill_model_kernel(), m_cl_mem_feature(),
+                       m_parameters.imageWidth, m_parameters.imageHeight,
+                       m_cl_index, m_cl_mem_M());
+    m_queue.enqueueNDRangeKernel(
+        m_cl_fill_model_kernel, cl::NDRange{},
+        cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
     m_cl_index++;
   }
 
   cl_float average_mag = 0;
 
-  //// WARNING: giving different avrg from cpu process
   m_queue.enqueueFillBuffer(m_cl_mem_avrg_Im, average_mag, 0, sizeof(cl_float));
 
-  set_arg_average_Im(m_cl_average_Im_kernel(), m_cl_mem_feature(), WIDTH,
-                     HEIGHT, m_cl_mem_avrg_Im());
-  m_queue.enqueueNDRangeKernel(m_cl_average_Im_kernel, cl::NDRange{},
-                               cl::NDRange{WIDTH, HEIGHT});
+  set_arg_average_Im(m_cl_average_Im_kernel(), m_cl_mem_feature(),
+                     m_parameters.imageWidth, m_parameters.imageHeight,
+                     m_cl_mem_avrg_Im());
+  m_queue.enqueueNDRangeKernel(
+      m_cl_average_Im_kernel, cl::NDRange{},
+      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
 
-  cl_uint index_r = 0;
   m_queue.enqueueReadBuffer(m_cl_mem_avrg_Im, true, 0, sizeof(cl_float),
                             &m_cl_avrg_Im);
-  m_cl_avrg_Im /= WIDTH * HEIGHT;
+  m_cl_avrg_Im /= m_parameters.imageWidth * m_parameters.imageHeight;
 
-  set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(), WIDTH,
-                     HEIGHT, m_cl_mem_R(), m_cl_index, m_cl_mem_D(),
-                     m_cl_mem_M(), m_cl_mem_index_r(), m_cl_avrg_Im);
-  m_queue.enqueueNDRangeKernel(m_cl_pbas_part1_kernel, cl::NDRange{},
-                               cl::NDRange{WIDTH, HEIGHT});
+  set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(),
+                     m_parameters.imageWidth, m_parameters.imageHeight,
+                     m_cl_mem_R(), m_cl_index, m_cl_mem_D(), m_cl_mem_M(),
+                     m_cl_mem_index_r(), m_cl_avrg_Im);
+  m_queue.enqueueNDRangeKernel(
+      m_cl_pbas_part1_kernel, cl::NDRange{},
+      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
 
-  set_arg_pbas_part2(m_cl_pbas_part2_kernel(), m_cl_mem_feature(), WIDTH,
-                     HEIGHT, m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_index_r(),
-                     min, m_cl_index, N, m_cl_mem_mask(), m_cl_mem_avrg_d(),
-                     m_cl_mem_random_numbers());
-  m_queue.enqueueNDRangeKernel(m_cl_pbas_part2_kernel, cl::NDRange{},
-                               cl::NDRange{WIDTH, HEIGHT});
+  set_arg_pbas_part2(
+      m_cl_pbas_part2_kernel(), m_cl_mem_feature(), m_parameters.imageWidth,
+      m_parameters.imageHeight, m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_index_r(),
+      m_parameters.minModels, m_cl_index, m_parameters.modelSize,
+      m_cl_mem_mask(), m_cl_mem_avrg_d(), m_cl_mem_random_numbers());
+  m_queue.enqueueNDRangeKernel(
+      m_cl_pbas_part2_kernel, cl::NDRange{},
+      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
 
-  set_arg_update_R_T(m_cl_update_T_R_kernel(), m_cl_mem_mask(), WIDTH, HEIGHT,
+  set_arg_update_R_T(m_cl_update_T_R_kernel(), m_cl_mem_mask(),
+                     m_parameters.imageWidth, m_parameters.imageHeight,
                      m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_avrg_d());
 
-  m_queue.enqueueNDRangeKernel(m_cl_update_T_R_kernel, cl::NDRange{},
-                               cl::NDRange{WIDTH, HEIGHT});
-  m_queue.enqueueReadBuffer(m_cl_mem_mask, true, 0, WIDTH * HEIGHT, mask.data);
+  m_queue.enqueueNDRangeKernel(
+      m_cl_update_T_R_kernel, cl::NDRange{},
+      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
+  m_queue.enqueueReadBuffer(m_cl_mem_mask, true, 0,
+                            m_parameters.imageWidth * m_parameters.imageHeight,
+                            mask.data);
 }
 
-void MPBAS::PBASImpl::create_kernels()
+void PBASImpl::create_kernels()
 {
   m_cl_fill_R_T_kernel = cl::Kernel{m_program, "fill_T_R"};
   m_cl_fill_model_kernel = cl::Kernel{m_program, "fill_model"};
@@ -163,21 +164,28 @@ void MPBAS::PBASImpl::create_kernels()
   m_cl_update_T_R_kernel = cl::Kernel{m_program, "update_T_R"};
 }
 
-void MPBAS::PBASImpl::create_buffers()
+void PBASImpl::create_buffers()
 {
-  constexpr size_t BufferSize = sizeof(cl_float) * WIDTH * HEIGHT;
+  const size_t BufferSize =
+      sizeof(cl_float) * m_parameters.imageWidth * m_parameters.imageHeight;
   m_cl_mem_T = cl::Buffer{m_context, CL_MEM_READ_WRITE, BufferSize, nullptr};
   m_cl_mem_R = cl::Buffer{m_context, CL_MEM_READ_WRITE, BufferSize, nullptr};
 
   m_cl_mem_I =
-      cl::Buffer{m_context, CL_MEM_READ_WRITE, WIDTH * HEIGHT, nullptr};
+      cl::Buffer{m_context, CL_MEM_READ_WRITE,
+                 m_parameters.imageWidth * m_parameters.imageHeight, nullptr};
   m_cl_mem_mask =
-      cl::Buffer{m_context, CL_MEM_READ_WRITE, WIDTH * HEIGHT, nullptr};
+      cl::Buffer{m_context, CL_MEM_READ_WRITE,
+                 m_parameters.imageWidth * m_parameters.imageHeight, nullptr};
 
   m_cl_mem_index_r = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                                sizeof(cl_uint) * WIDTH * HEIGHT, nullptr};
+                                sizeof(cl_uint) * m_parameters.imageWidth *
+                                    m_parameters.imageHeight,
+                                nullptr};
   m_cl_mem_feature = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                                sizeof(cl_float2) * WIDTH * HEIGHT, nullptr};
+                                sizeof(cl_float2) * m_parameters.imageWidth *
+                                    m_parameters.imageHeight,
+                                nullptr};
   m_cl_mem_avrg_Im =
       cl::Buffer{m_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
                  sizeof(cl_float), &m_cl_avrg_Im};
@@ -185,32 +193,44 @@ void MPBAS::PBASImpl::create_buffers()
   m_cl_mem_avrg_d =
       cl::Buffer{m_context, CL_MEM_READ_WRITE, BufferSize, nullptr};
   m_cl_mem_random_numbers = cl::Buffer{
-      m_context, CL_MEM_READ_WRITE, sizeof(cl_uint) * WIDTH * HEIGHT, nullptr};
+      m_context, CL_MEM_READ_WRITE,
+      sizeof(cl_uint) * m_parameters.imageWidth * m_parameters.imageHeight,
+      nullptr};
 
-  // sizeof(cl_float2) * WIDTH * HEIGHT * N = 8 * 320 * 240 * 20
+  // sizeof(cl_float2) * m_parameters.imageWidth * m_parameters.imageHeight * N
+  // = 8 * 320 * 240 *
+  // 20
   m_cl_mem_M = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                          sizeof(cl_float2) * WIDTH * HEIGHT * N, nullptr};
-  // sizeof(cl_float) * WIDTH * HEIGHT * N = 4 * 320 * 240 * 20
+                          sizeof(cl_float2) * m_parameters.imageWidth *
+                              m_parameters.imageHeight * m_parameters.modelSize,
+                          nullptr};
+  // sizeof(cl_float) * m_parameters.imageWidth * m_parameters.imageHeight * N =
+  // 4 * 320 * 240 *
+  // 20
   m_cl_mem_D = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                          sizeof(cl_float) * WIDTH * HEIGHT * N, nullptr};
+                          sizeof(cl_float) * m_parameters.imageWidth *
+                              m_parameters.imageHeight * m_parameters.modelSize,
+                          nullptr};
 
   cl_uint index_r = 0;
   m_queue.enqueueFillBuffer(m_cl_mem_index_r, index_r, 0,
-                            sizeof(cl_uint) * WIDTH * HEIGHT);
+                            sizeof(cl_uint) * m_parameters.imageWidth *
+                                m_parameters.imageHeight);
 
   std::vector<cl_uint> r_numbers;
   std::generate_n(std::back_insert_iterator<std::vector<cl_uint>>(r_numbers),
-                  (WIDTH * HEIGHT), randomGenerator);
+                  (m_parameters.imageWidth * m_parameters.imageHeight),
+                  randomGenerator);
   m_queue.enqueueWriteBuffer(m_cl_mem_random_numbers, true, 0,
-                             sizeof(cl_uint) * WIDTH * HEIGHT,
+                             sizeof(cl_uint) * m_parameters.imageWidth *
+                                 m_parameters.imageHeight,
                              r_numbers.data());
 }
 
-void MPBAS::PBASImpl::set_arg_fill_R_T_kernel(cl_kernel &cl_fill_R_T_kernel,
-                                              cl_mem &mem_T,
-                                              const cl_uint &width,
-                                              const cl_uint &height,
-                                              cl_mem &mem_R, cl_int T, cl_int R)
+void PBASImpl::set_arg_fill_R_T_kernel(cl_kernel &cl_fill_R_T_kernel,
+                                       cl_mem &mem_T, const cl_uint &width,
+                                       const cl_uint &height, cl_mem &mem_R,
+                                       cl_int T, cl_int R)
 {
   cl_int err;
   int index = 0;
@@ -232,9 +252,10 @@ void MPBAS::PBASImpl::set_arg_fill_R_T_kernel(cl_kernel &cl_fill_R_T_kernel,
 
   MCLASSERT(err);
 }
-void MPBAS::PBASImpl::set_arg_fill_model(
-    cl_kernel &fill_model_kernel, cl_mem &cl_mem_feature, const cl_uint width,
-    const cl_uint height, const cl_uint cl_index, cl_mem &cl_mem_M)
+void PBASImpl::set_arg_fill_model(cl_kernel &fill_model_kernel,
+                                  cl_mem &cl_mem_feature, const cl_uint width,
+                                  const cl_uint height, const cl_uint cl_index,
+                                  cl_mem &cl_mem_M)
 {
 
   cl_int err;
@@ -256,9 +277,9 @@ void MPBAS::PBASImpl::set_arg_fill_model(
   MCLASSERT(err);
 }
 
-void MPBAS::PBASImpl::set_arg_magnitude_kernel(cl_kernel &cl_magnitude_kernel,
-                                               cl_mem &src, cl_uint width,
-                                               cl_uint height, cl_mem &mag)
+void PBASImpl::set_arg_magnitude_kernel(cl_kernel &cl_magnitude_kernel,
+                                        cl_mem &src, cl_uint width,
+                                        cl_uint height, cl_mem &mag)
 {
   cl_int err;
   int index = 0;
@@ -277,9 +298,9 @@ void MPBAS::PBASImpl::set_arg_magnitude_kernel(cl_kernel &cl_magnitude_kernel,
   MCLASSERT(err);
 }
 
-void MPBAS::PBASImpl::set_arg_average_Im(cl_kernel &kernel, cl_mem &mem_Im,
-                                         cl_uint width, cl_uint height,
-                                         cl_mem &mem_avrg_Im)
+void PBASImpl::set_arg_average_Im(cl_kernel &kernel, cl_mem &mem_Im,
+                                  cl_uint width, cl_uint height,
+                                  cl_mem &mem_avrg_Im)
 {
   cl_int err;
   int index = 0;
@@ -294,12 +315,11 @@ void MPBAS::PBASImpl::set_arg_average_Im(cl_kernel &kernel, cl_mem &mem_Im,
   MCLASSERT(err);
 }
 
-void MPBAS::PBASImpl::set_arg_pbas_part1(cl_kernel &kernel, cl_mem &mem_feature,
-                                         const int &width, const int &height,
-                                         cl_mem &mem_R, cl_uint model_index,
-                                         cl_mem &mem_D, cl_mem &mem_M,
-                                         cl_mem &mem_index_r,
-                                         cl_float average_mag)
+void PBASImpl::set_arg_pbas_part1(cl_kernel &kernel, cl_mem &mem_feature,
+                                  const int &width, const int &height,
+                                  cl_mem &mem_R, cl_uint model_index,
+                                  cl_mem &mem_D, cl_mem &mem_M,
+                                  cl_mem &mem_index_r, cl_float average_mag)
 {
   cl_int err;
   int index = 0;
@@ -323,11 +343,13 @@ void MPBAS::PBASImpl::set_arg_pbas_part1(cl_kernel &kernel, cl_mem &mem_feature,
   MCLASSERT(err);
 }
 
-void MPBAS::PBASImpl::set_arg_pbas_part2(
-    cl_kernel &kernel, cl_mem &mem_feature, const int width, const int height,
-    cl_mem &mem_R, cl_mem &mem_T, cl_mem &mem_index_r, cl_uint min_v,
-    const cl_uint cl_index, const cl_uint model_size, cl_mem &mem_mask,
-    cl_mem &mem_avrg_d, cl_mem &mem_rand)
+void PBASImpl::set_arg_pbas_part2(cl_kernel &kernel, cl_mem &mem_feature,
+                                  const int width, const int height,
+                                  cl_mem &mem_R, cl_mem &mem_T,
+                                  cl_mem &mem_index_r, cl_uint min_v,
+                                  const cl_uint cl_index,
+                                  const cl_uint model_size, cl_mem &mem_mask,
+                                  cl_mem &mem_avrg_d, cl_mem &mem_rand)
 {
   cl_int err;
   int index = 0;
@@ -362,10 +384,10 @@ void MPBAS::PBASImpl::set_arg_pbas_part2(
   MCLASSERT(err);
 }
 
-void MPBAS::PBASImpl::set_arg_update_R_T(cl_kernel &kernel, cl_mem &mem_mask,
-                                         const int width, const int height,
-                                         cl_mem &mem_R, cl_mem &mem_T,
-                                         cl_mem &mem_avrg_d)
+void PBASImpl::set_arg_update_R_T(cl_kernel &kernel, cl_mem &mem_mask,
+                                  const int width, const int height,
+                                  cl_mem &mem_R, cl_mem &mem_T,
+                                  cl_mem &mem_avrg_d)
 {
   cl_int err;
   int index = 0;
