@@ -7,8 +7,8 @@ int main()
   cv::VideoCapture cap("../dataset/Crowded1.avi");
   /* cv::VideoCapture cap(0); */
 
-  constexpr cl_uint width = 320;
-  constexpr cl_uint height = 240;
+  constexpr cl_uint width = 640;
+  constexpr cl_uint height = 420;
 
   PBASImpl pbas_m{PBASParameter{width, height}};
 
@@ -23,7 +23,10 @@ int main()
       cv::GaussianBlur(input, input, cv::Size(5, 5), 1.5);
 
       utility::timeThis("Process time: ",
-                        [&]() { pbas_m.process(input, out); });
+                        [&]() {
+                        out= pbas_m.process(input);
+                        
+                        });
 
       cv::medianBlur(out, out, 3);
       cv::imshow("Src", input);

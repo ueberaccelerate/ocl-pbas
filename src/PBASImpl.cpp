@@ -66,342 +66,167 @@ PBASImpl::PBASImpl(const PBASParameter param)
   // buffer initialize
 
   utility::timeThis("Create Buffers time: ", [&]() { create_buffers(); });
+
+  utility::timeThis("Setting args time: ", [&]() { set_args(); });
+
+  utility::timeThis("Create mask time: ", [&]() {
+    m_result_mask = cv::Mat::zeros(m_parameters.imageInfo.height,
+                                   m_parameters.imageInfo.width, CV_8UC1);
+  });
 }
 
-void PBASImpl::process(cv::Mat src, cv::Mat &mask)
+cv::Mat PBASImpl::process(cv::Mat src)
 {
-  // NOTE: OpenCL work position
   assert(src.type() == CV_8UC1);
 
-  mask = cv::Mat::zeros(m_parameters.imageHeight, m_parameters.imageWidth,
-                        CV_8UC1);
-  m_queue.enqueueWriteBuffer(m_cl_mem_I, true, 0,
-                             m_parameters.imageWidth * m_parameters.imageHeight,
-                             src.data);
-
-  set_arg_magnitude_kernel(m_cl_magnitude_kernel(), m_cl_mem_I(),
-                           m_parameters.imageWidth, m_parameters.imageHeight,
-                           m_cl_mem_feature());
+  m_queue.enqueueWriteBuffer(
+      m_cl_mem_I, true, 0,
+      m_parameters.imageInfo.width * m_parameters.imageInfo.height, src.data);
+  m_cl_magnitude_kernel.setArg(0, m_cl_mem_I);
+  m_cl_magnitude_kernel.setArg(1, m_cl_mem_feature);
+  m_cl_magnitude_kernel.setArg(2, m_parameters);
   m_queue.enqueueNDRangeKernel(
       m_cl_magnitude_kernel, cl::NDRange{},
-      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
+      cl::NDRange{m_parameters.imageInfo.width, m_parameters.imageInfo.height});
 
   if (m_cl_index < m_parameters.modelSize)
   {
     if (m_cl_index == 0)
     {
-      set_arg_fill_R_T_kernel(m_cl_fill_R_T_kernel(), m_cl_mem_T(),
-                              m_parameters.imageWidth, m_parameters.imageHeight,
-                              m_cl_mem_R(), m_parameters.T_lower,
-                              m_parameters.R_lower);
-
-      m_queue.enqueueNDRangeKernel(
-          m_cl_fill_R_T_kernel, cl::NDRange{},
-          cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
+      m_cl_fill_R_T_kernel.setArg(0, m_cl_mem_R);
+      m_cl_fill_R_T_kernel.setArg(1, m_cl_mem_T);
+      m_cl_fill_R_T_kernel.setArg(2, m_parameters);
+      m_queue.enqueueNDRangeKernel(m_cl_fill_R_T_kernel, cl::NDRange{},
+                                   cl::NDRange{m_parameters.imageInfo.width,
+                                               m_parameters.imageInfo.height});
     }
-
-    set_arg_fill_model(m_cl_fill_model_kernel(), m_cl_mem_feature(),
-                       m_parameters.imageWidth, m_parameters.imageHeight,
-                       m_cl_index, m_cl_mem_M());
-    m_queue.enqueueNDRangeKernel(
-        m_cl_fill_model_kernel, cl::NDRange{},
-        cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
-    m_cl_index++;
+    m_cl_fill_model_kernel.setArg(0, m_cl_mem_feature);
+    m_cl_fill_model_kernel.setArg(1, m_cl_mem_M);
+    m_cl_fill_model_kernel.setArg(2, m_cl_index);
+    m_cl_fill_model_kernel.setArg(3, m_parameters);
+    m_queue.enqueueNDRangeKernel(m_cl_fill_model_kernel, cl::NDRange{},
+                                 cl::NDRange{m_parameters.imageInfo.width,
+                                             m_parameters.imageInfo.height});
+    ++m_cl_index;
   }
-
   cl_float average_mag = 0;
-
   m_queue.enqueueFillBuffer(m_cl_mem_avrg_Im, average_mag, 0, sizeof(cl_float));
-
-  set_arg_average_Im(m_cl_average_Im_kernel(), m_cl_mem_feature(),
-                     m_parameters.imageWidth, m_parameters.imageHeight,
-                     m_cl_mem_avrg_Im());
+  m_cl_average_Im_kernel.setArg(0, m_cl_mem_feature);
+  m_cl_average_Im_kernel.setArg(1, m_parameters);
+  m_cl_average_Im_kernel.setArg(2, m_cl_mem_avrg_Im);
   m_queue.enqueueNDRangeKernel(
       m_cl_average_Im_kernel, cl::NDRange{},
-      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
+      cl::NDRange{m_parameters.imageInfo.width, m_parameters.imageInfo.height});
 
   m_queue.enqueueReadBuffer(m_cl_mem_avrg_Im, true, 0, sizeof(cl_float),
                             &m_cl_avrg_Im);
-  m_cl_avrg_Im /= m_parameters.imageWidth * m_parameters.imageHeight;
-
-  set_arg_pbas_part1(m_cl_pbas_part1_kernel(), m_cl_mem_feature(),
-                     m_parameters.imageWidth, m_parameters.imageHeight,
-                     m_cl_mem_R(), m_cl_index, m_cl_mem_D(), m_cl_mem_M(),
-                     m_cl_mem_index_r(), m_cl_avrg_Im);
+  m_cl_avrg_Im /= m_parameters.imageInfo.width * m_parameters.imageInfo.height;
+  m_cl_pbas_kernel.setArg(0, m_cl_mem_feature);
+  m_cl_pbas_kernel.setArg(1, m_cl_mem_R);
+  m_cl_pbas_kernel.setArg(2, m_cl_mem_T);
+  m_cl_pbas_kernel.setArg(3, m_cl_mem_D);
+  m_cl_pbas_kernel.setArg(4, m_cl_mem_M);
+  m_cl_pbas_kernel.setArg(5, m_cl_mem_mask);
+  m_cl_pbas_kernel.setArg(6, m_cl_mem_avrg_d);
+  m_cl_pbas_kernel.setArg(7, m_cl_mem_random_numbers);
+  m_cl_pbas_kernel.setArg(8, m_cl_index);
+  m_cl_pbas_kernel.setArg(9, m_cl_avrg_Im);
+  m_cl_pbas_kernel.setArg(10, m_parameters);
   m_queue.enqueueNDRangeKernel(
-      m_cl_pbas_part1_kernel, cl::NDRange{},
-      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
-
-  set_arg_pbas_part2(
-      m_cl_pbas_part2_kernel(), m_cl_mem_feature(), m_parameters.imageWidth,
-      m_parameters.imageHeight, m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_index_r(),
-      m_parameters.minModels, m_cl_index, m_parameters.modelSize,
-      m_cl_mem_mask(), m_cl_mem_avrg_d(), m_cl_mem_random_numbers());
-  m_queue.enqueueNDRangeKernel(
-      m_cl_pbas_part2_kernel, cl::NDRange{},
-      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
-
-  set_arg_update_R_T(m_cl_update_T_R_kernel(), m_cl_mem_mask(),
-                     m_parameters.imageWidth, m_parameters.imageHeight,
-                     m_cl_mem_R(), m_cl_mem_T(), m_cl_mem_avrg_d());
-
+      m_cl_pbas_kernel, cl::NDRange{},
+      cl::NDRange{m_parameters.imageInfo.width, m_parameters.imageInfo.height});
+  m_cl_update_T_R_kernel.setArg(0, m_cl_mem_mask);
+  m_cl_update_T_R_kernel.setArg(1, m_cl_mem_R);
+  m_cl_update_T_R_kernel.setArg(2, m_cl_mem_T);
+  m_cl_update_T_R_kernel.setArg(3, m_cl_mem_avrg_d);
+  m_cl_update_T_R_kernel.setArg(4, m_parameters);
   m_queue.enqueueNDRangeKernel(
       m_cl_update_T_R_kernel, cl::NDRange{},
-      cl::NDRange{m_parameters.imageWidth, m_parameters.imageHeight});
+      cl::NDRange{m_parameters.imageInfo.width, m_parameters.imageInfo.height});
   m_queue.enqueueReadBuffer(m_cl_mem_mask, true, 0,
-                            m_parameters.imageWidth * m_parameters.imageHeight,
-                            mask.data);
+                            m_parameters.imageInfo.width *
+                                m_parameters.imageInfo.height,
+                            m_result_mask.data);
+  return m_result_mask;
 }
 
+void PBASImpl::set_args() {}
 void PBASImpl::create_kernels()
 {
   m_cl_fill_R_T_kernel = cl::Kernel{m_program, "fill_T_R"};
   m_cl_fill_model_kernel = cl::Kernel{m_program, "fill_model"};
   m_cl_magnitude_kernel = cl::Kernel{m_program, "magnitude"};
   m_cl_average_Im_kernel = cl::Kernel{m_program, "average"};
-  m_cl_pbas_part1_kernel = cl::Kernel{m_program, "pbas_part1"};
-  m_cl_pbas_part2_kernel = cl::Kernel{m_program, "pbas_part2"};
+  m_cl_pbas_kernel = cl::Kernel{m_program, "pbas"};
   m_cl_update_T_R_kernel = cl::Kernel{m_program, "update_T_R"};
 }
 
 void PBASImpl::create_buffers()
 {
-  const size_t BufferSize =
-      sizeof(cl_float) * m_parameters.imageWidth * m_parameters.imageHeight;
+  const size_t BufferSize = sizeof(cl_float) * m_parameters.imageInfo.width *
+                            m_parameters.imageInfo.height;
   m_cl_mem_T = cl::Buffer{m_context, CL_MEM_READ_WRITE, BufferSize, nullptr};
   m_cl_mem_R = cl::Buffer{m_context, CL_MEM_READ_WRITE, BufferSize, nullptr};
 
-  m_cl_mem_I =
-      cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                 m_parameters.imageWidth * m_parameters.imageHeight, nullptr};
-  m_cl_mem_mask =
-      cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                 m_parameters.imageWidth * m_parameters.imageHeight, nullptr};
+  m_cl_mem_I = cl::Buffer{
+      m_context, CL_MEM_READ_WRITE,
+      m_parameters.imageInfo.width * m_parameters.imageInfo.height, nullptr};
+  m_cl_mem_mask = cl::Buffer{
+      m_context, CL_MEM_READ_WRITE,
+      m_parameters.imageInfo.width * m_parameters.imageInfo.height, nullptr};
 
   m_cl_mem_index_r = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                                sizeof(cl_uint) * m_parameters.imageWidth *
-                                    m_parameters.imageHeight,
+                                sizeof(cl_uint) * m_parameters.imageInfo.width *
+                                    m_parameters.imageInfo.height,
                                 nullptr};
-  m_cl_mem_feature = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                                sizeof(cl_float2) * m_parameters.imageWidth *
-                                    m_parameters.imageHeight,
-                                nullptr};
+  m_cl_mem_feature =
+      cl::Buffer{m_context, CL_MEM_READ_WRITE,
+                 sizeof(cl_float2) * m_parameters.imageInfo.width *
+                     m_parameters.imageInfo.height,
+                 nullptr};
   m_cl_mem_avrg_Im =
       cl::Buffer{m_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
                  sizeof(cl_float), &m_cl_avrg_Im};
 
   m_cl_mem_avrg_d =
       cl::Buffer{m_context, CL_MEM_READ_WRITE, BufferSize, nullptr};
-  m_cl_mem_random_numbers = cl::Buffer{
-      m_context, CL_MEM_READ_WRITE,
-      sizeof(cl_uint) * m_parameters.imageWidth * m_parameters.imageHeight,
-      nullptr};
+  m_cl_mem_random_numbers =
+      cl::Buffer{m_context, CL_MEM_READ_WRITE,
+                 sizeof(cl_uint) * m_parameters.imageInfo.width *
+                     m_parameters.imageInfo.height,
+                 nullptr};
 
-  // sizeof(cl_float2) * m_parameters.imageWidth * m_parameters.imageHeight * N
+  // sizeof(cl_float2) * m_parameters.imageInfo.width *
+  // m_parameters.imageInfo.height * N
   // = 8 * 320 * 240 *
   // 20
-  m_cl_mem_M = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                          sizeof(cl_float2) * m_parameters.imageWidth *
-                              m_parameters.imageHeight * m_parameters.modelSize,
-                          nullptr};
-  // sizeof(cl_float) * m_parameters.imageWidth * m_parameters.imageHeight * N =
+  m_cl_mem_M =
+      cl::Buffer{m_context, CL_MEM_READ_WRITE,
+                 sizeof(cl_float2) * m_parameters.imageInfo.width *
+                     m_parameters.imageInfo.height * m_parameters.modelSize,
+                 nullptr};
+  // sizeof(cl_float) * m_parameters.imageInfo.width *
+  // m_parameters.imageInfo.height * N =
   // 4 * 320 * 240 *
   // 20
-  m_cl_mem_D = cl::Buffer{m_context, CL_MEM_READ_WRITE,
-                          sizeof(cl_float) * m_parameters.imageWidth *
-                              m_parameters.imageHeight * m_parameters.modelSize,
-                          nullptr};
+  m_cl_mem_D =
+      cl::Buffer{m_context, CL_MEM_READ_WRITE,
+                 sizeof(cl_float) * m_parameters.imageInfo.width *
+                     m_parameters.imageInfo.height * m_parameters.modelSize,
+                 nullptr};
 
   cl_uint index_r = 0;
   m_queue.enqueueFillBuffer(m_cl_mem_index_r, index_r, 0,
-                            sizeof(cl_uint) * m_parameters.imageWidth *
-                                m_parameters.imageHeight);
+                            sizeof(cl_uint) * m_parameters.imageInfo.width *
+                                m_parameters.imageInfo.height);
 
   std::vector<cl_uint> r_numbers;
-  std::generate_n(std::back_insert_iterator<std::vector<cl_uint>>(r_numbers),
-                  (m_parameters.imageWidth * m_parameters.imageHeight),
-                  randomGenerator);
+  std::generate_n(
+      std::back_insert_iterator<std::vector<cl_uint>>(r_numbers),
+      (m_parameters.imageInfo.width * m_parameters.imageInfo.height),
+      m_random_generator);
   m_queue.enqueueWriteBuffer(m_cl_mem_random_numbers, true, 0,
-                             sizeof(cl_uint) * m_parameters.imageWidth *
-                                 m_parameters.imageHeight,
+                             sizeof(cl_uint) * m_parameters.imageInfo.width *
+                                 m_parameters.imageInfo.height,
                              r_numbers.data());
-}
-
-void PBASImpl::set_arg_fill_R_T_kernel(cl_kernel &cl_fill_R_T_kernel,
-                                       cl_mem &mem_T, const cl_uint &width,
-                                       const cl_uint &height, cl_mem &mem_R,
-                                       cl_int T, cl_int R)
-{
-  cl_int err;
-  int index = 0;
-  err =
-      clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_mem), (void *)&mem_T);
-  index++;
-  err |=
-      clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_mem), (void *)&mem_R);
-  index++;
-  err |= clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_uint),
-                        (void *)&width);
-  index++;
-  err |= clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_uint),
-                        (void *)&height);
-  index++;
-  err |= clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_int), (void *)&T);
-  index++;
-  err |= clSetKernelArg(cl_fill_R_T_kernel, index, sizeof(cl_int), (void *)&R);
-
-  MCLASSERT(err);
-}
-void PBASImpl::set_arg_fill_model(cl_kernel &fill_model_kernel,
-                                  cl_mem &cl_mem_feature, const cl_uint width,
-                                  const cl_uint height, const cl_uint cl_index,
-                                  cl_mem &cl_mem_M)
-{
-
-  cl_int err;
-  int index = 0;
-  err = clSetKernelArg(fill_model_kernel, index, sizeof(cl_mem),
-                       (void *)&cl_mem_feature);
-  index++;
-  err |=
-      clSetKernelArg(fill_model_kernel, index, sizeof(cl_uint), (void *)&width);
-  index++;
-  err |= clSetKernelArg(fill_model_kernel, index, sizeof(cl_uint),
-                        (void *)&height);
-  index++;
-  err |= clSetKernelArg(fill_model_kernel, index, sizeof(cl_uint),
-                        (void *)&cl_index);
-  index++;
-  err |= clSetKernelArg(fill_model_kernel, index, sizeof(cl_mem),
-                        (void *)&cl_mem_M);
-  MCLASSERT(err);
-}
-
-void PBASImpl::set_arg_magnitude_kernel(cl_kernel &cl_magnitude_kernel,
-                                        cl_mem &src, cl_uint width,
-                                        cl_uint height, cl_mem &mag)
-{
-  cl_int err;
-  int index = 0;
-  err =
-      clSetKernelArg(cl_magnitude_kernel, index, sizeof(cl_mem), (void *)&src);
-  index++;
-  err |= clSetKernelArg(cl_magnitude_kernel, index, sizeof(cl_uint),
-                        (void *)&width);
-  index++;
-  err |= clSetKernelArg(cl_magnitude_kernel, index, sizeof(cl_uint),
-                        (void *)&height);
-  index++;
-  err |=
-      clSetKernelArg(cl_magnitude_kernel, index, sizeof(cl_mem), (void *)&mag);
-
-  MCLASSERT(err);
-}
-
-void PBASImpl::set_arg_average_Im(cl_kernel &kernel, cl_mem &mem_Im,
-                                  cl_uint width, cl_uint height,
-                                  cl_mem &mem_avrg_Im)
-{
-  cl_int err;
-  int index = 0;
-  err = clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_Im);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&width);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&height);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_avrg_Im);
-
-  MCLASSERT(err);
-}
-
-void PBASImpl::set_arg_pbas_part1(cl_kernel &kernel, cl_mem &mem_feature,
-                                  const int &width, const int &height,
-                                  cl_mem &mem_R, cl_uint model_index,
-                                  cl_mem &mem_D, cl_mem &mem_M,
-                                  cl_mem &mem_index_r, cl_float average_mag)
-{
-  cl_int err;
-  int index = 0;
-  err = clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_feature);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&width);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&height);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_R);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&model_index);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_D);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_M);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_index_r);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_float), (void *)&average_mag);
-  MCLASSERT(err);
-}
-
-void PBASImpl::set_arg_pbas_part2(cl_kernel &kernel, cl_mem &mem_feature,
-                                  const int width, const int height,
-                                  cl_mem &mem_R, cl_mem &mem_T,
-                                  cl_mem &mem_index_r, cl_uint min_v,
-                                  const cl_uint cl_index,
-                                  const cl_uint model_size, cl_mem &mem_mask,
-                                  cl_mem &mem_avrg_d, cl_mem &mem_rand)
-{
-  cl_int err;
-  int index = 0;
-  err = clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_feature);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&width);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&height);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_R);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_T);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_index_r);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&min_v);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&cl_index);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&model_size);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_mask);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_avrg_d);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_rand);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&m_cl_mem_M);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&m_cl_mem_D);
-  index++;
-  MCLASSERT(err);
-}
-
-void PBASImpl::set_arg_update_R_T(cl_kernel &kernel, cl_mem &mem_mask,
-                                  const int width, const int height,
-                                  cl_mem &mem_R, cl_mem &mem_T,
-                                  cl_mem &mem_avrg_d)
-{
-  cl_int err;
-  int index = 0;
-  err = clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_mask);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&width);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_uint), (void *)&height);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_R);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_T);
-  index++;
-  err |= clSetKernelArg(kernel, index, sizeof(cl_mem), (void *)&mem_avrg_d);
-  index++;
-  MCLASSERT(err);
 }

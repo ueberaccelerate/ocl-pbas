@@ -2,20 +2,28 @@
 
 #define SK_SIZE 3
 
-constant float min_R = 18.f;
-constant int min_index = 2;
-constant float R_inc_dec = 0.05f;
-constant int R_scale = 5;
-constant int R_lower = 10;
-constant int T_lower = 2;
-constant float T_dec = 0.05f;
-constant int T_inc = 1;
-constant int T_upper = 200;
-
-constant int model_size = 20;
-
-constant float alpha = 10.f;
-constant float beta = 1.f;
+struct ImageInfo
+{
+  uint width;
+  uint height;
+};
+struct PBASParameter
+{
+  struct ImageInfo imageInfo;
+  uint modelSize;
+  uint minModels;
+  uint T_lower;
+  uint R_lower;
+  uint min_index;
+  uint R_scale;
+  uint T_inc;
+  uint T_upper;
+  float min_R;
+  float R_inc_dec;
+  float T_dec;
+  float alpha;
+  float beta;
+};
 
 constant float Gy[SK_SIZE * SK_SIZE] = {-1.f, -2.f, -1.f, 0.f, 0.f,
                                         0.f,  1.f,  2.f,  1.f};
@@ -24,75 +32,56 @@ constant float Gx[SK_SIZE * SK_SIZE] = {-1.f, 0.f,  1.f, -2.f, 0.f,
 
 uint lfsr113_Bits(global uint *seed)
 {
-
-  // enum { A = 4294883355U };
-  // uint x = (*seed).x, c = (*seed).y;  // Unpack the state
-  // uint res = x^c;                     // Calculate the result
-  // uint hi = mul_hi(x, A);              // Step the RNG
-  // x = x*A + c;
-  // c = hi + (x<c);
-  //*seed = (uint2)(x, c);               // Pack the state back up
-  // return res;                       // Return the next result
-
   *seed = (*seed * 1103515245U + 12345U) & 0x7fffffffU;
   return *seed;
-
-  // unsigned int z1 = *seed, z2 = 1313245, z3 = *seed, z4 = 12345;
-  // unsigned int b;
-  // b = ((z1 << 6) ^ z1) >> 13;
-  // z1 = ((z1 & 4294967294U) << 18) ^ b;
-  // b = ((z2 << 2) ^ z2) >> 27;
-  // z2 = ((z2 & 4294967288U) << 2) ^ b;
-  // b = ((z3 << 13) ^ z3) >> 21;
-  // z3 = ((z3 & 4294967280U) << 7) ^ b;
-  // b = ((z4 << 3) ^ z4) >> 12;
-  // z4 = ((z4 & 4294967168U) << 13) ^ b;
-  //*seed = abs((z1 ^ z2 ^ z3 ^ z4));
-  // return *seed;
 }
 
-kernel void fill_T_R(global float *oT, global float *oR, const uint width,
-                     const uint height, const uint T_lower, const uint R_lower)
+kernel void fill_T_R(global float *oT, global float *oR,
+                     const struct PBASParameter parameters)
 {
   int ii = get_global_id(0); // == get_global_id(0);
   int jj = get_global_id(1); // == get_global_id(1);
   int2 coord = (int2)(get_global_id(0), get_global_id(1));
-  /* if (IS_BOUNDS(coord.x, width) && IS_BOUNDS(coord.y, height)) */
+  const uint width = parameters.imageInfo.width;
+  const uint height = parameters.imageInfo.height;
   {
-    oT[jj * width + ii] = T_lower;
-    oR[jj * width + ii] = R_lower;
+    oT[jj * width + ii] = parameters.T_lower;
+    oR[jj * width + ii] = parameters.R_lower;
   }
 }
-kernel void fill_model(global float2 *feature, const uint width,
-                       const uint height, const uint model_index,
-                       global float2 *model)
+kernel void fill_model(global float2 *feature, global float2 *model,
+                       const uint model_index,
+                       const struct PBASParameter parameters)
 {
   int ii = get_global_id(0); // == get_global_id(0);
   int jj = get_global_id(1); // == get_global_id(1);
   int2 coord = (int2)(get_global_id(0), get_global_id(1));
+  const uint width = parameters.imageInfo.width;
+  const uint height = parameters.imageInfo.height;
+  const uint model_size = parameters.modelSize;
 
   const float2 feature_val = feature[jj * width + ii];
   model[jj * width * model_size + ii * model_size + model_index] = feature_val;
 }
-kernel void average(global float2 *Im, const uint width, const uint height,
+kernel void average(global float2 *Im, const struct PBASParameter parameters,
                     global float *avrg_i)
 {
   int ii = get_global_id(0); // == get_global_id(0);
   int jj = get_global_id(1); // == get_global_id(1);
   int2 coords = (int2)(ii, jj);
-
-  /* if (IS_BOUNDS(ii * jj, width * height)) */
-  {
-    *avrg_i += Im[jj * width + ii].y;
-  }
+  const uint width = parameters.imageInfo.width;
+  *avrg_i += Im[jj * width + ii].y;
 }
 
-kernel void magnitude(global uchar *src, const uint width, const uint height,
-                      global float2 *des)
+kernel void magnitude(global uchar *src, global float2 *des,
+                      const struct PBASParameter parameters)
 {
-  int ii = get_global_id(0); // == get_global_id(0);
-  int jj = get_global_id(1); // == get_global_id(1);
+  int ii = get_global_id(0);
+  int jj = get_global_id(1);
   int2 coords = (int2)(ii, jj);
+
+  const uint width = parameters.imageInfo.width;
+  const uint height = parameters.imageInfo.height;
 
   float gx_val = 0.f;
   float gy_val = 0.f;
@@ -115,16 +104,13 @@ kernel void magnitude(global uchar *src, const uint width, const uint height,
     }
   }
 
-  /* if (IS_BOUNDS(ii * jj, width * height)) */
-  {
-    const float gxx = gx_val * gx_val;
-    const float gyy = gy_val * gy_val;
+  const float gxx = gx_val * gx_val;
+  const float gyy = gy_val * gy_val;
 
-    const float mag = sqrt(gxx + gyy);
-    const float i_val = src[jj * width + ii];
-    des[jj * width + ii].x = i_val;
-    des[jj * width + ii].y = mag;
-  }
+  const float mag = sqrt(gxx + gyy);
+  const float i_val = src[jj * width + ii];
+  des[jj * width + ii].x = i_val;
+  des[jj * width + ii].y = mag;
 }
 
 inline float pbas_distance(const float I_i, const float I_m, const float B_i,
@@ -138,63 +124,52 @@ inline float pbas_distance(const float I_i, const float I_m, const float B_i,
   return res;
 }
 
-kernel void pbas_part1(global float2 *feature, const uint width,
-                       const uint height, global float *R,
-                       const uint total_model_index, global float *D,
-                       global float2 *model, global uint *index_r,
-                       const float average_mag)
+kernel void pbas(global float2 *feature, global float *R, global float *T,
+                 global float *D, global float2 *model, global uchar *mask,
+                 global float *avrg_d, global uint *rand_n,
+                 const uint total_model_index, const float average_mag,
+                 const struct PBASParameter parameters)
 {
   int ii = get_global_id(0);
   int jj = get_global_id(1);
 
   int2 coords = (int2)(ii, jj);
-  int index_d = 0; // index_r[jj * width + ii];
-  int i = 0;
-  while (index_d < min_index && i < total_model_index)
+  const uint width = parameters.imageInfo.width;
+  const uint height = parameters.imageInfo.height;
+  const uint min_index = parameters.minModels;
+  const uint model_size = parameters.modelSize;
+  const float alpha = parameters.alpha;
+  const float beta = parameters.beta;
+  const uint T_upper = parameters.T_upper;
+  const float min_R = parameters.min_R;
+  int index_r = 0;
+  int curri = 0;
+  while (index_r < min_index && curri < total_model_index)
   {
     const float2 I_val = feature[jj * width + ii];
     const float r_val = R[jj * width + ii];
-    const float2 B_val = model[jj * width * model_size + ii * model_size + i];
+    const float2 B_val = model[jj * width * model_size + ii * model_size + curri];
 
     const float diff =
         pbas_distance(I_val.x, I_val.y, B_val.x, B_val.y, alpha, average_mag);
-
     if (diff < r_val)
     {
       if (diff < min_R)
       {
-        D[jj * width * model_size + ii * model_size + i] = diff;
+        D[jj * width * model_size + ii * model_size + curri] = diff;
       }
-      index_d++;
+      ++index_r;
     }
 
-    index_r[jj * width + ii] = index_d;
-    ++i;
+    ++curri;
   }
-}
-
-// NOTE model in range [0 ... model_size]
-kernel void pbas_part2(global float2 *feature, const uint width,
-                       const uint height, global float *R, global float *T,
-                       global uint *index_r, const uint min_index,
-                       const uint index_l, const uint model_size,
-                       global uchar *mask, global float *avrg_d,
-                       global uint *rand_n, global float2 *model,
-                       global float *D)
-{
-
-  int ii = get_global_id(0); // == get_global_id(0);
-  int jj = get_global_id(1); // == get_global_id(1);
-
-  int2 coords = (int2)(ii, jj);
 
   float avr = 1.f;
   uchar color = 0;
-  if (index_r[jj * width + ii] >= min_index)
+  if (index_r >= min_index)
   {
     color = 0;
-
-    if (index_l == model_size)
+    if (total_model_index == parameters.modelSize)
     {
       const int pos_b = jj * width + ii;
       //
@@ -245,20 +220,27 @@ kernel void pbas_part2(global float2 *feature, const uint width,
   {
     color = 255;
   }
-  /* if (IS_BOUNDS(ii * jj, width * height)) */
-  {
-    mask[jj * width + ii] = color;
-    avrg_d[jj * width + ii] = avr;
-  }
+  mask[jj * width + ii] = color;
+  avrg_d[jj * width + ii] = avr;
 }
 
-kernel void update_T_R(global uchar *mask, const uint width, const uint height,
-                       global float *R, global float *T, global float *avrg_d)
+kernel void update_T_R(global uchar *mask, global float *R, global float *T,
+                       global float *avrg_d,
+                       const struct PBASParameter parameters)
 {
   int ii = get_global_id(0); // == get_global_id(0);
   int jj = get_global_id(1); // == get_global_id(1);
   int2 coords = (int2)(ii, jj);
 
+  const uint width = parameters.imageInfo.width;
+  const uint height = parameters.imageInfo.height;
+  const float R_scale = parameters.R_scale;
+  const float R_inc_dec = parameters.R_inc_dec;
+  const float R_lower = parameters.R_lower;
+  const float T_dec = parameters.T_dec;
+  const float T_lower = parameters.T_lower;
+  const float T_upper = parameters.T_upper;
+  const float T_inc = parameters.T_inc;
   float R_val = R[jj * width + ii];
   float T_val = T[jj * width + ii];
   const uint pos = jj * width + ii;

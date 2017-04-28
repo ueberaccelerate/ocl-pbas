@@ -2,18 +2,34 @@
 
 #include <CL/cl.hpp>
 #include <opencv2/opencv.hpp>
+struct ImageInfo
+{
+  cl_uint width;
+  cl_uint height;
 
+  constexpr ImageInfo(cl_uint width, cl_uint height)
+      : width(width), height(height)
+  {
+  }
+};
 struct PBASParameter
 {
-  cl_uint imageWidth;
-  cl_uint imageHeight;
+  ImageInfo imageInfo;
   cl_uint modelSize = 20;
   cl_uint minModels = 2;
   cl_uint T_lower = 2;
   cl_uint R_lower = 10;
-
+  cl_uint min_index = 2;
+  cl_uint R_scale = 5;
+  cl_uint T_inc = 1;
+  cl_uint T_upper = 200;
+  cl_float min_R = 18.f;
+  cl_float R_inc_dec = 0.05f;
+  cl_float T_dec = 0.05f;
+  cl_float alpha = 10.f;
+  cl_float beta = 1.f;
   constexpr PBASParameter(cl_uint width, cl_uint height)
-      : imageWidth(width), imageHeight(height)
+      : imageInfo(width, height)
   {
   }
 };
@@ -24,7 +40,7 @@ public:
   PBASImpl(const PBASParameter param);
   ~PBASImpl() = default;
 
-  void process(cv::Mat src, cv::Mat &mask);
+  cv::Mat process(cv::Mat src);
 
 private:
   PBASParameter m_parameters;
@@ -33,7 +49,8 @@ private:
 
   cl_float m_cl_avrg_Im = 0.f;
 
-  cv::RNG randomGenerator;
+  cv::RNG m_random_generator;
+  cv::Mat m_result_mask;
 
   cl::Context m_context;
   cl::Platform m_platform;
@@ -45,8 +62,7 @@ private:
   cl::Kernel m_cl_fill_model_kernel;
   cl::Kernel m_cl_magnitude_kernel;
   cl::Kernel m_cl_average_Im_kernel;
-  cl::Kernel m_cl_pbas_part1_kernel;
-  cl::Kernel m_cl_pbas_part2_kernel;
+  cl::Kernel m_cl_pbas_kernel;
   cl::Kernel m_cl_update_T_R_kernel;
 
   // ==========================
@@ -73,34 +89,5 @@ private:
 
   void create_kernels();
   void create_buffers();
-
-  void set_arg_fill_R_T_kernel(cl_kernel &cl_fill_R_T_kernel, cl_mem &mem_T,
-                               const cl_uint &width, const cl_uint &height,
-                               cl_mem &mem_R, cl_int T, cl_int R);
-
-  void set_arg_fill_model(cl_kernel &fill_model_kernel, cl_mem &cl_mem_feature,
-                          const cl_uint width, const cl_uint height,
-                          const cl_uint cl_index, cl_mem &cl_mem_M);
-
-  void set_arg_magnitude_kernel(cl_kernel &cl_magnitude_kernel, cl_mem &src,
-                                cl_uint width, cl_uint height, cl_mem &mag);
-
-  void set_arg_average_Im(cl_kernel &cl_average_Im, cl_mem &mem_Im,
-                          cl_uint width, cl_uint height, cl_mem &mem_avrg_Im);
-
-  void set_arg_pbas_part1(cl_kernel &cl_pbas_part1, cl_mem &mem_feature,
-                          const int &width, const int &height, cl_mem &mem_R,
-                          cl_uint model_index, cl_mem &mem_D, cl_mem &mem_M,
-                          cl_mem &mem_index_r, cl_float average_mag);
-
-  void set_arg_pbas_part2(cl_kernel &cl_pbas_part2, cl_mem &mem_feature,
-                          const int width, const int height, cl_mem &mem_R,
-                          cl_mem &mem_T, cl_mem &mem_index_r, cl_uint min_v,
-                          const cl_uint cl_index, const cl_uint model_size,
-                          cl_mem &mem_mask, cl_mem &mem_avrg_d,
-                          cl_mem &mem_rand);
-
-  void set_arg_update_R_T(cl_kernel &cl_update_R_T, cl_mem &mem_mask,
-                          const int width, const int height, cl_mem &mem_R,
-                          cl_mem &mem_T, cl_mem &mem_avrg_d);
+  void set_args();
 };
