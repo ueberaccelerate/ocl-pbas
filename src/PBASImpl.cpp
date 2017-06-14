@@ -20,10 +20,22 @@ void GetPlatformInfoList(cl_platform_id pcl, T... param_name)
   std::initializer_list<int>{(GetPlatformInfo(pcl, param_name), 0)...};
 }
 
+template <typename T> void setArgument(cl::Kernel &kernel, const int i, T arg)
+{
+  kernel.setArg(i, arg);
+}
+
+template <typename... T> void SetArgs(cl::Kernel &kernel, T... args)
+{
+  int i = 0;
+  std::initializer_list<int>{(setArgument(kernel, i++, args), 0)...};
+}
+
 PBASImpl::PBASImpl(const PBASParameter param)
     : m_parameters(param), m_cl_index(0), m_cl_avrg_Im(0.f), m_model_index(0)
 {
   std::cout << "PBASImpl()\n";
+
   utility::timeThis("Create Context time: ", [&]() {
     // m_context = cl::Context{CL_DEVICE_TYPE_CPU};
     // std::vector<cl::Platform> platforms;
@@ -82,9 +94,7 @@ cv::Mat PBASImpl::process(cv::Mat src)
   m_queue.enqueueWriteBuffer(
       m_cl_mem_I, true, 0,
       m_parameters.imageInfo.width * m_parameters.imageInfo.height, src.data);
-  m_cl_magnitude_kernel.setArg(0, m_cl_mem_I);
-  m_cl_magnitude_kernel.setArg(1, m_cl_mem_feature);
-  m_cl_magnitude_kernel.setArg(2, m_parameters);
+  SetArgs(m_cl_magnitude_kernel, m_cl_mem_I, m_cl_mem_feature, m_parameters);
   m_queue.enqueueNDRangeKernel(
       m_cl_magnitude_kernel, cl::NDRange{},
       cl::NDRange{m_parameters.imageInfo.width, m_parameters.imageInfo.height});
@@ -93,17 +103,13 @@ cv::Mat PBASImpl::process(cv::Mat src)
   {
     if (m_cl_index == 0)
     {
-      m_cl_fill_R_T_kernel.setArg(0, m_cl_mem_R);
-      m_cl_fill_R_T_kernel.setArg(1, m_cl_mem_T);
-      m_cl_fill_R_T_kernel.setArg(2, m_parameters);
+      SetArgs(m_cl_fill_R_T_kernel, m_cl_mem_R, m_cl_mem_T, m_parameters);
       m_queue.enqueueNDRangeKernel(m_cl_fill_R_T_kernel, cl::NDRange{},
                                    cl::NDRange{m_parameters.imageInfo.width,
                                                m_parameters.imageInfo.height});
     }
-    m_cl_fill_model_kernel.setArg(0, m_cl_mem_feature);
-    m_cl_fill_model_kernel.setArg(1, m_cl_mem_M);
-    m_cl_fill_model_kernel.setArg(2, m_cl_index);
-    m_cl_fill_model_kernel.setArg(3, m_parameters);
+    SetArgs(m_cl_fill_model_kernel, m_cl_mem_feature, m_cl_mem_M, m_cl_index,
+            m_parameters);
     m_queue.enqueueNDRangeKernel(m_cl_fill_model_kernel, cl::NDRange{},
                                  cl::NDRange{m_parameters.imageInfo.width,
                                              m_parameters.imageInfo.height});
@@ -111,9 +117,8 @@ cv::Mat PBASImpl::process(cv::Mat src)
   }
   cl_float average_mag = 0;
   m_queue.enqueueFillBuffer(m_cl_mem_avrg_Im, average_mag, 0, sizeof(cl_float));
-  m_cl_average_Im_kernel.setArg(0, m_cl_mem_feature);
-  m_cl_average_Im_kernel.setArg(1, m_parameters);
-  m_cl_average_Im_kernel.setArg(2, m_cl_mem_avrg_Im);
+  SetArgs(m_cl_average_Im_kernel, m_cl_mem_feature, m_parameters,
+          m_cl_mem_avrg_Im);
   m_queue.enqueueNDRangeKernel(
       m_cl_average_Im_kernel, cl::NDRange{},
       cl::NDRange{m_parameters.imageInfo.width, m_parameters.imageInfo.height});
@@ -121,25 +126,16 @@ cv::Mat PBASImpl::process(cv::Mat src)
   m_queue.enqueueReadBuffer(m_cl_mem_avrg_Im, true, 0, sizeof(cl_float),
                             &m_cl_avrg_Im);
   m_cl_avrg_Im /= m_parameters.imageInfo.width * m_parameters.imageInfo.height;
-  m_cl_pbas_kernel.setArg(0, m_cl_mem_feature);
-  m_cl_pbas_kernel.setArg(1, m_cl_mem_R);
-  m_cl_pbas_kernel.setArg(2, m_cl_mem_T);
-  m_cl_pbas_kernel.setArg(3, m_cl_mem_D);
-  m_cl_pbas_kernel.setArg(4, m_cl_mem_M);
-  m_cl_pbas_kernel.setArg(5, m_cl_mem_mask);
-  m_cl_pbas_kernel.setArg(6, m_cl_mem_avrg_d);
-  m_cl_pbas_kernel.setArg(7, m_cl_mem_random_numbers);
-  m_cl_pbas_kernel.setArg(8, m_cl_index);
-  m_cl_pbas_kernel.setArg(9, m_cl_avrg_Im);
-  m_cl_pbas_kernel.setArg(10, m_parameters);
+
+  SetArgs(m_cl_pbas_kernel, m_cl_mem_feature, m_cl_mem_R, m_cl_mem_T,
+          m_cl_mem_D, m_cl_mem_M, m_cl_mem_mask, m_cl_mem_avrg_d,
+          m_cl_mem_random_numbers, m_cl_index, m_cl_avrg_Im, m_parameters);
+
   m_queue.enqueueNDRangeKernel(
       m_cl_pbas_kernel, cl::NDRange{},
       cl::NDRange{m_parameters.imageInfo.width, m_parameters.imageInfo.height});
-  m_cl_update_T_R_kernel.setArg(0, m_cl_mem_mask);
-  m_cl_update_T_R_kernel.setArg(1, m_cl_mem_R);
-  m_cl_update_T_R_kernel.setArg(2, m_cl_mem_T);
-  m_cl_update_T_R_kernel.setArg(3, m_cl_mem_avrg_d);
-  m_cl_update_T_R_kernel.setArg(4, m_parameters);
+  SetArgs(m_cl_update_T_R_kernel, m_cl_mem_mask, m_cl_mem_R, m_cl_mem_T,
+          m_cl_mem_avrg_d, m_parameters);
   m_queue.enqueueNDRangeKernel(
       m_cl_update_T_R_kernel, cl::NDRange{},
       cl::NDRange{m_parameters.imageInfo.width, m_parameters.imageInfo.height});
