@@ -2,24 +2,20 @@
 
 #include <CL/cl.hpp>
 #include <opencv2/opencv.hpp>
-struct ImageInfo
-{
+struct ImageInfo {
   cl_uint width;
   cl_uint height;
+  cl_uint channels;
 
-  constexpr ImageInfo(cl_uint width, cl_uint height)
-      : width(width), height(height)
-  {
-  }
+  ImageInfo(cl_uint width, cl_uint height, cl_uint channels)
+      : width(width), height(height), channels(channels) {}
 };
-struct PBASParameter
-{
+struct PBASParameter {
   ImageInfo imageInfo;
-  cl_uint modelSize = 20;
+  cl_uint modelSize = 30;
   cl_uint minModels = 2;
   cl_uint T_lower = 2;
-  cl_uint R_lower = 10;
-  cl_uint min_index = 2;
+  cl_uint R_lower = 18;
   cl_uint R_scale = 5;
   cl_uint T_inc = 1;
   cl_uint T_upper = 200;
@@ -28,21 +24,20 @@ struct PBASParameter
   cl_float T_dec = 0.05f;
   cl_float alpha = 10.f;
   cl_float beta = 1.f;
-  constexpr PBASParameter(cl_uint width, cl_uint height)
-      : imageInfo(width, height)
-  {
-  }
+  cl_float avrg_mag = 0.f;
+  PBASParameter(cl_uint width, cl_uint height, cl_uint channels)
+      : imageInfo(width, height, channels) {}
 };
 
-class PBASImpl
-{
-public:
-  PBASImpl(const PBASParameter param);
+class PBASImpl {
+ public:
+  PBASImpl(const PBASParameter param,const std::string &cl_source);
   ~PBASImpl() = default;
 
   cv::Mat process(cv::Mat src);
+  cv::Mat run(cv::Mat src);
 
-private:
+ private:
   PBASParameter m_parameters;
 
   cl_uint m_cl_index = 0;
@@ -65,13 +60,17 @@ private:
   cl::Kernel m_cl_pbas_kernel;
   cl::Kernel m_cl_update_T_R_kernel;
 
+  cv::Ptr<cv::CLAHE> m_clahe;
+
   // ==========================
   // image
 
   // buffer
   cl::Buffer m_cl_mem_I;
   cl::Buffer m_cl_mem_feature;
-  cl::Buffer m_cl_mem_avrg_Im;
+
+  cl::Buffer m_cl_mem_parameters;
+
   cl::Buffer m_cl_mem_index_r;
 
   cl_uint m_model_index;
@@ -79,15 +78,17 @@ private:
   cl::Buffer m_cl_mem_M;
 
   cl::Buffer m_cl_mem_mask;
+
   cl::Buffer m_cl_mem_avrg_d;
+
+  cl::Buffer m_cl_mem_model_out;
+
   cl::Buffer m_cl_mem_R;
   cl::Buffer m_cl_mem_T;
   cl::Buffer m_cl_mem_random_numbers;
 
   // ==========================
   // ocl function
-
   void create_kernels();
   void create_buffers();
-  void set_args();
 };

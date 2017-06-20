@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <string>
 #define MCLASSERT(ERR)                                                         \
@@ -45,13 +46,6 @@ public:
   static std::string load_program_cl_from_file(const std::string &filename);
 };
 
-template <typename Func> void timeThis(const std::string &label, Func &&func)
-{
-  const auto start_time = std::chrono::steady_clock::now();
-  func();
-  const auto end_time = std::chrono::steady_clock::now();
-  const auto duration_ms = std::chrono::duration<double>(end_time - start_time);
-  std::cout << label << duration_ms.count() << " s or "
-            << (duration_ms.count() * 1000.f) << " ms\n";
-}
+void timeThis(const std::string &label, std::function<void()> &&func);
+
 }

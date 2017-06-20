@@ -280,4 +280,15 @@ std::string Utiles::load_program_cl_from_file(const std::string &filename)
 
   return content;
 }
+
+void timeThis(const std::string &label, std::function<void()> &&func)
+{
+  const auto start_time = std::chrono::steady_clock::now();
+  func();
+  const auto end_time = std::chrono::steady_clock::now();
+  const auto duration_ms = std::chrono::duration<double>(end_time - start_time);
+  std::cout << label << duration_ms.count() << " s or "
+    << (duration_ms.count() * 1000.f) << " ms\r";
+}
+
 } // namespace utility
